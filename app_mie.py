@@ -1,0 +1,142 @@
+import streamlit as st
+from datetime import datetime
+
+from mie_backend import (
+    insertar_mie,
+    insertar_foto,
+    subir_foto_a_bucket,
+    listar_mie,
+    obtener_mie_detalle,
+    obtener_fotos_mie,
+)
+
+st.set_page_config(page_title="MIE - Gestión de Derrames", layout="wide")
+
+st.title("🛢️ Gestión de MIE (Derrames / DRM)")
+
+modo = st.sidebar.radio("Modo", ["Nuevo MIE", "Historial"])
+
+
+# =======================================================
+#  MODO 1 - NUEVO MIE
+# =======================================================
+if modo == "Nuevo MIE":
+
+    st.header("Registrar un nuevo MIE")
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        drm = st.text_input("DRM / Código de incidente")
+        pozo = st.text_input("Pozo")
+        locacion = st.text_input("Locación")
+        fluido = st.text_input("Fluido", value="Petróleo + agua de formación")
+        volumen = st.number_input("Volumen estimado (m³)", min_value=0.0, step=0.1)
+
+    with col2:
+        causa_probable = st.text_input("Causa probable")
+        responsable = st.text_input("Responsable / Supervisor")
+        creado_por = st.text_input("Usuario que carga el MIE")
+        fecha_hora_evento = st.datetime_input(
+            "Fecha y hora del evento",
+            value=datetime.now()
+        )
+
+    observaciones = st.text_area("Observaciones adicionales")
+
+    st.subheader("📸 Fotos del derrame (ANTES)")
+    fotos = st.file_uploader(
+        "Subir una o más fotos",
+        type=["jpg", "jpeg", "png"],
+        accept_multiple_files=True
+    )
+
+    btn_guardar = st.button("Guardar MIE")
+
+    if btn_guardar:
+        if not pozo or not locacion or not creado_por:
+            st.error("❌ Pozo, Locación y Usuario que carga son obligatorios.")
+        else:
+            try:
+                # Insertar el MIE en BigQuery
+                mie_id, codigo = insertar_mie(
+                    drm=drm,
+                    pozo=pozo,
+                    locacion=locacion,
+                    fluido=fluido,
+                    volumen_estimado_m3=volumen,
+                    causa_probable=causa_probable,
+                    responsable=responsable,
+                    observaciones=observaciones,
+                    creado_por=creado_por,
+                    fecha_hora_evento=fecha_hora_evento,
+                )
+                st.success(f"✅ MIE guardado. CÓDIGO: {codigo} (ID={mie_id})")
+
+                # Subir fotos al bucket
+                if fotos:
+                    for archivo in fotos:
+                        nombre_destino = (
+                            f"{codigo}/ANTES/"
+                            f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{archivo.name}"
+                        )
+                        url = subir_foto_a_bucket(archivo, nombre_destino)
+                        insertar_foto(mie_id, "ANTES", url)
+
+                    st.info(f"📁 Se guardaron {len(fotos)} fotos en la nube.")
+
+                st.session_state["ultimo_mie_id"] = mie_id
+                st.session_state["ultimo_codigo_mie"] = codigo
+
+            except Exception as e:
+                st.error(f"⚠️ Error guardando MIE: {e}")
+
+
+# =======================================================
+#  MODO 2 - HISTORIAL
+# =======================================================
+else:
+    st.header("Historial de MIE")
+
+    registros = listar_mie()
+
+    if not registros:
+        st.info("No hay MIE registrados todavía.")
+    else:
+        opciones = {
+            f"{r.codigo_mie} - {r.pozo} ({r.estado})": r.mie_id
+            for r in registros
+        }
+
+        seleccion = st.selectbox("Seleccionar MIE", list(opciones.keys()))
+        mie_id = opciones[seleccion]
+
+        detalle = obtener_mie_detalle(mie_id)
+        fotos = obtener_fotos_mie(mie_id)
+
+        # ---------------------------------------------------
+        # DATOS DEL MIE
+        # ---------------------------------------------------
+        st.subheader("📄 Datos del MIE")
+
+        col1, col2 = st.columns(2)
+
+        with col1:
+            st.write(f"**Código:** {detalle.codigo_mie}")
+            st.write(f"**DRM:** {detalle.drm}")
+            st.write(f"**Pozo:** {detalle.pozo}")
+            st.write(f"**Locación:** {detalle.locacion}")
+            st.write(f"**Fluido:** {detalle.fluido}")
+            st.write(f"**Volumen (m³):** {detalle.volumen_estimado_m3}")
+
+        with col2:
+            st.write(f"**Causa probable:** {detalle.causa_probable}")
+            st.write(f"**Responsable:** {detalle.responsable}")
+            st.write(f"**Estado:** {detalle.estado}")
+            st.write(f"**Creado por:** {detalle.creado_por}")
+            st.write(f"**Fecha evento:** {detalle.fecha_hora_evento}")
+            st.write(f"**Fecha carga:** {detalle.fecha_creacion_registro}")
+
+        # ---------------------------------------------------
+        # OBSERVACIONES
+        # ----------------------------
