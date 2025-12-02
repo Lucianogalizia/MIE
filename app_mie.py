@@ -1,5 +1,5 @@
 import streamlit as st
-from datetime import datetime
+from datetime import datetime, date, time
 
 from mie_backend import (
     insertar_mie,
@@ -37,10 +37,17 @@ if modo == "Nuevo MIE":
         causa_probable = st.text_input("Causa probable")
         responsable = st.text_input("Responsable / Supervisor")
         creado_por = st.text_input("Usuario que carga el MIE")
-        fecha_hora_evento = st.datetime_input(
-            "Fecha y hora del evento",
-            value=datetime.now()
-        )
+
+        # 🔁 CAMBIO: antes usábamos st.datetime_input (no existe)
+        # Ahora usamos fecha + hora por separado y las combinamos.
+        fecha_defecto = date.today()
+        hora_defecto = datetime.now().time().replace(microsecond=0)
+
+        fecha_evento = st.date_input("Fecha del evento", value=fecha_defecto)
+        hora_evento = st.time_input("Hora del evento", value=hora_defecto)
+
+        # datetime final que se pasa al backend
+        fecha_hora_evento = datetime.combine(fecha_evento, hora_evento)
 
     observaciones = st.text_area("Observaciones adicionales")
 
@@ -139,4 +146,20 @@ else:
 
         # ---------------------------------------------------
         # OBSERVACIONES
-        # ----------------------------
+        # ---------------------------------------------------
+        st.subheader("📝 Observaciones")
+        st.write(detalle.observaciones)
+
+        # ---------------------------------------------------
+        # FOTOS
+        # ---------------------------------------------------
+        st.subheader("📸 Fotos asociadas")
+
+        if not fotos:
+            st.info("No hay fotos para este MIE.")
+        else:
+            for f in fotos:
+                st.markdown(f"**{f.tipo}** – {f.fecha_hora}")
+                st.image(f.url_foto, use_column_width=True)
+
+
