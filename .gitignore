@@ -1,0 +1,22 @@
+
+---
+
+# 📄 **.gitignore**
+
+```text
+__pycache__/
+*.pyc
+.env
+venv/
+env/
+.DS_Store
+
+# Fotos nunca deben ir al repositorio
+*/ANTES/*
+*/DESPUES/*
+
+# Archivos de logs
+*.log
+
+# JSON de credenciales (por seguridad)
+*.json
