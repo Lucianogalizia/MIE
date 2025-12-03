@@ -12,7 +12,6 @@ from mie_backend import (
     cerrar_mie_con_remediacion,
 )
 
-
 st.set_page_config(page_title="MIE - Gestión de Derrames", layout="wide")
 
 st.title("🛢️ Gestión de MIE (Derrames / DRM)")
@@ -41,15 +40,12 @@ if modo == "Nuevo MIE":
         responsable = st.text_input("Responsable / Supervisor")
         creado_por = st.text_input("Usuario que carga el MIE")
 
-        # 🔁 CAMBIO: antes usábamos st.datetime_input (no existe)
-        # Ahora usamos fecha + hora por separado y las combinamos.
         fecha_defecto = date.today()
         hora_defecto = datetime.now().time().replace(microsecond=0)
 
         fecha_evento = st.date_input("Fecha del evento", value=fecha_defecto)
         hora_evento = st.time_input("Hora del evento", value=hora_defecto)
 
-        # datetime final que se pasa al backend
         fecha_hora_evento = datetime.combine(fecha_evento, hora_evento)
 
     observaciones = st.text_area("Observaciones adicionales")
@@ -68,7 +64,6 @@ if modo == "Nuevo MIE":
             st.error("❌ Pozo, Locación y Usuario que carga son obligatorios.")
         else:
             try:
-                # Insertar el MIE en BigQuery
                 mie_id, codigo = insertar_mie(
                     drm=drm,
                     pozo=pozo,
@@ -83,15 +78,14 @@ if modo == "Nuevo MIE":
                 )
                 st.success(f"✅ MIE guardado. CÓDIGO: {codigo} (ID={mie_id})")
 
-                # Subir fotos al bucket
                 if fotos:
                     for archivo in fotos:
                         nombre_destino = (
                             f"{codigo}/ANTES/"
                             f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{archivo.name}"
                         )
-                        url = subir_foto_a_bucket(archivo, nombre_destino)
-                        insertar_foto(mie_id, "ANTES", url)
+                        blob_name = subir_foto_a_bucket(archivo, nombre_destino)
+                        insertar_foto(mie_id, "ANTES", blob_name)
 
                     st.info(f"📁 Se guardaron {len(fotos)} fotos en la nube.")
 
@@ -100,7 +94,6 @@ if modo == "Nuevo MIE":
 
             except Exception as e:
                 st.error(f"⚠️ Error guardando MIE: {e}")
-
 
 
 # =======================================================
@@ -114,7 +107,6 @@ else:
     if not registros:
         st.info("No hay MIE registrados todavía.")
     else:
-        # Selector
         opciones = {
             f"{r.codigo_mie} - {r.pozo} ({r.estado})": r.mie_id
             for r in registros
@@ -126,7 +118,7 @@ else:
         fotos = obtener_fotos_mie(mie_id)
 
         # ---------------------------------------------------
-        # DATOS DEL MIE
+        # DATOS EDITABLES DEL MIE
         # ---------------------------------------------------
         st.subheader("📄 Datos del MIE")
 
@@ -138,15 +130,18 @@ else:
             locacion_edit = st.text_input("Locación", detalle.locacion)
             fluido_edit = st.text_input("Fluido", detalle.fluido)
             volumen_edit = st.number_input(
-                "Volumen estimado (m³)", min_value=0.0, step=0.1,
-                value=float(detalle.volumen_estimado_m3 or 0)
+                "Volumen estimado (m³)",
+                min_value=0.0,
+                step=0.1,
+                value=float(detalle.volumen_estimado_m3 or 0.0),
             )
 
         with col2:
             causa_edit = st.text_input("Causa probable", detalle.causa_probable)
             responsable_edit = st.text_input("Responsable", detalle.responsable)
             observaciones_edit = st.text_area(
-                "Observaciones adicionales", detalle.observaciones
+                "Observaciones adicionales",
+                detalle.observaciones or "",
             )
             st.write(f"**Estado:** {detalle.estado}")
             st.write(f"**Creado por:** {detalle.creado_por}")
@@ -169,7 +164,7 @@ else:
             st.experimental_rerun()
 
         # ---------------------------------------------------
-        # FOTOS
+        # FOTOS (ANTES / DESPUÉS)
         # ---------------------------------------------------
         st.subheader("📸 Fotos asociadas")
 
@@ -178,10 +173,10 @@ else:
         else:
             for f in fotos:
                 st.markdown(f"**{f['tipo']}** – {f['fecha_hora']}")
-                st.image(f["data"], use_column_width=True)
+                st.image(f["data"], use_container_width=True)
 
         # ---------------------------------------------------
-        # REMEDIACIÓN (solo si NO está cerrado)
+        # REMEDIACIÓN (si no está cerrado)
         # ---------------------------------------------------
         if detalle.estado != "CERRADO":
             st.subheader("🛠️ Remediación del Derrame")
@@ -204,73 +199,30 @@ else:
             )
 
             if st.button("✔️ Guardar remediación y CERRAR MIE"):
+                try:
+                    cerrar_mie_con_remediacion(
+                        mie_id,
+                        rem_fecha_final,
+                        rem_responsable,
+                        rem_detalle,
+                    )
 
-                # Guardamos remediación
-                cerrar_mie_con_remediacion(
-                    mie_id,
-                    rem_fecha_final,
-                    rem_responsable,
-                    rem_detalle
-                )
+                    if fotos_despues:
+                        codigo = detalle.codigo_mie
+                        for archivo in fotos_despues:
+                            nombre_destino = (
+                                f"{codigo}/DESPUES/"
+                                f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{archivo.name}"
+                            )
+                            blob_name = subir_foto_a_bucket(archivo, nombre_destino)
+                            insertar_foto(mie_id, "DESPUES", blob_name)
 
-                # Guardamos fotos DESPUÉS
-                if fotos_despues:
-                    codigo = detalle.codigo_mie
-                    for archivo in fotos_despues:
-                        nombre_destino = (
-                            f"{codigo}/DESPUES/"
-                            f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{archivo.name}"
-                        )
-                        blob_name = subir_foto_a_bucket(archivo, nombre_destino)
-                        insertar_foto(mie_id, "DESPUES", blob_name)
-
-                st.success("MIE cerrado exitosamente.")
-                st.experimental_rerun()
-
+                    st.success("MIE cerrado exitosamente.")
+                    st.experimental_rerun()
+                except Exception as e:
+                    st.error(f"Error al cerrar el MIE: {e}")
         else:
             st.success("Este MIE ya está CERRADO.")
 
-        # ---------------------------------------------------
-        # DATOS DEL MIE
-        # ---------------------------------------------------
-        st.subheader("📄 Datos del MIE")
-
-        col1, col2 = st.columns(2)
-
-        with col1:
-            st.write(f"**Código:** {detalle.codigo_mie}")
-            st.write(f"**DRM:** {detalle.drm}")
-            st.write(f"**Pozo:** {detalle.pozo}")
-            st.write(f"**Locación:** {detalle.locacion}")
-            st.write(f"**Fluido:** {detalle.fluido}")
-            st.write(f"**Volumen (m³):** {detalle.volumen_estimado_m3}")
-
-        with col2:
-            st.write(f"**Causa probable:** {detalle.causa_probable}")
-            st.write(f"**Responsable:** {detalle.responsable}")
-            st.write(f"**Estado:** {detalle.estado}")
-            st.write(f"**Creado por:** {detalle.creado_por}")
-            st.write(f"**Fecha evento:** {detalle.fecha_hora_evento}")
-            st.write(f"**Fecha carga:** {detalle.fecha_creacion_registro}")
-
-        # ---------------------------------------------------
-        # OBSERVACIONES
-        # ---------------------------------------------------
-        st.subheader("📝 Observaciones")
-        st.write(detalle.observaciones)
-
-
-        # ---------------------------------------------------
-        # ---------------------------------------------------
-        # FOTOS
-        # ---------------------------------------------------
-        st.subheader("📸 Fotos asociadas")
-
-        if not fotos:
-            st.info("No hay fotos para este MIE.")
-        else:
-            for f in fotos:
-                st.markdown(f"**{f['tipo']}** – {f['fecha_hora']}")
-                st.image(f["data"], use_container_width=True)
 
 
