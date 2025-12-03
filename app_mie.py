@@ -152,6 +152,7 @@ else:
 
 
         # ---------------------------------------------------
+        # ---------------------------------------------------
         # FOTOS
         # ---------------------------------------------------
         st.subheader("📸 Fotos asociadas")
@@ -161,6 +162,6 @@ else:
         else:
             for f in fotos:
                 st.markdown(f"**{f['tipo']}** – {f['fecha_hora']}")
-                st.image(f["url"], use_container_width=True)
+                st.image(f["data"], use_container_width=True)
 
 
