@@ -5,6 +5,7 @@ from io import BytesIO
 from google.cloud import bigquery, storage
 from config import PROJECT_ID, DATASET_ID, BUCKET_NAME
 
+# Clientes globales
 bq_client = bigquery.Client(project=PROJECT_ID)
 storage_client = storage.Client(project=PROJECT_ID)
 
@@ -189,6 +190,91 @@ def obtener_fotos_mie(mie_id: int):
         })
 
     return fotos
+
+
+# ---------------------------------------------------------
+# 9) Actualizar datos básicos de un MIE (editar)
+# ---------------------------------------------------------
+def actualizar_mie_basico(
+    mie_id: int,
+    drm: str,
+    pozo: str,
+    locacion: str,
+    fluido: str,
+    volumen_estimado_m3: float | None,
+    causa_probable: str,
+    responsable: str,
+    observaciones: str,
+):
+    query = f"""
+        UPDATE `{PROJECT_ID}.{DATASET_ID}.mie_eventos`
+        SET
+          drm = @drm,
+          pozo = @pozo,
+          locacion = @locacion,
+          fluido = @fluido,
+          volumen_estimado_m3 = @volumen,
+          causa_probable = @causa_probable,
+          responsable = @responsable,
+          observaciones = @observaciones
+        WHERE mie_id = @mie_id
+    """
+
+    job_config = bigquery.QueryJobConfig(
+        query_parameters=[
+            bigquery.ScalarQueryParameter("drm", "STRING", drm),
+            bigquery.ScalarQueryParameter("pozo", "STRING", pozo),
+            bigquery.ScalarQueryParameter("locacion", "STRING", locacion),
+            bigquery.ScalarQueryParameter("fluido", "STRING", fluido),
+            bigquery.ScalarQueryParameter(
+                "volumen",
+                "FLOAT64",
+                float(volumen_estimado_m3) if volumen_estimado_m3 is not None else None,
+            ),
+            bigquery.ScalarQueryParameter("causa_probable", "STRING", causa_probable),
+            bigquery.ScalarQueryParameter("responsable", "STRING", responsable),
+            bigquery.ScalarQueryParameter("observaciones", "STRING", observaciones),
+            bigquery.ScalarQueryParameter("mie_id", "INT64", mie_id),
+        ]
+    )
+
+    bq_client.query(query, job_config=job_config).result()
+
+
+# ---------------------------------------------------------
+# 10) Cerrar MIE con datos de remediación
+# ---------------------------------------------------------
+def cerrar_mie_con_remediacion(
+    mie_id: int,
+    rem_fecha: datetime,
+    rem_responsable: str,
+    rem_detalle: str,
+):
+    query = f"""
+        UPDATE `{PROJECT_ID}.{DATASET_ID}.mie_eventos`
+        SET
+          rem_fecha = @rem_fecha,
+          rem_responsable = @rem_responsable,
+          rem_detalle = @rem_detalle,
+          estado = "CERRADO"
+        WHERE mie_id = @mie_id
+    """
+
+    job_config = bigquery.QueryJobConfig(
+        query_parameters=[
+            bigquery.ScalarQueryParameter(
+                "rem_fecha", "TIMESTAMP", rem_fecha.isoformat()
+            ),
+            bigquery.ScalarQueryParameter(
+                "rem_responsable", "STRING", rem_responsable
+            ),
+            bigquery.ScalarQueryParameter("rem_detalle", "STRING", rem_detalle),
+            bigquery.ScalarQueryParameter("mie_id", "INT64", mie_id),
+        ]
+    )
+
+    bq_client.query(query, job_config=job_config).result()
+
 
 
 
