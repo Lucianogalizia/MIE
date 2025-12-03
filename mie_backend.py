@@ -1,11 +1,10 @@
 # mie_backend.py
-from datetime import datetime
+from datetime import datetime, timedelta
 from io import BytesIO
 
 from google.cloud import bigquery, storage
 from config import PROJECT_ID, DATASET_ID, BUCKET_NAME
 
-# Clientes de BigQuery y Storage
 bq_client = bigquery.Client(project=PROJECT_ID)
 storage_client = storage.Client(project=PROJECT_ID)
 
@@ -35,12 +34,12 @@ def generar_codigo_mie(mie_id: int) -> str:
 
 
 # ---------------------------------------------------------
-# 3) Subir foto al bucket y devolver URL pública
+# 3) Subir foto al bucket y devolver NOMBRE DE OBJETO (no URL)
 # ---------------------------------------------------------
 def subir_foto_a_bucket(file_obj, nombre_destino: str) -> str:
     """
-    Sube la foto al bucket y devuelve la URL.
-    file_obj = archivo recibido de st.file_uploader
+    Sube la foto al bucket y devuelve el nombre del objeto (blob_name),
+    no una URL pública.
     """
     bucket = storage_client.bucket(BUCKET_NAME)
     blob = bucket.blob(nombre_destino)
@@ -48,12 +47,31 @@ def subir_foto_a_bucket(file_obj, nombre_destino: str) -> str:
     data = file_obj.read()
     blob.upload_from_file(BytesIO(data), content_type=file_obj.type)
 
-    # URL accesible
-    return f"https://storage.googleapis.com/{BUCKET_NAME}/{nombre_destino}"
+    # Devolvemos solo el path interno del objeto
+    return nombre_destino
 
 
 # ---------------------------------------------------------
-# 4) Insertar un nuevo MIE en BigQuery
+# 4) Generar URL firmada para un objeto
+# ---------------------------------------------------------
+def generar_url_firmada(blob_name: str) -> str:
+    """
+    Devuelve una URL firmada válida por 1 hora para leer la imagen.
+    No hace falta que el bucket sea público.
+    """
+    bucket = storage_client.bucket(BUCKET_NAME)
+    blob = bucket.blob(blob_name)
+
+    url = blob.generate_signed_url(
+        version="v4",
+        expiration=timedelta(hours=1),
+        method="GET",
+    )
+    return url
+
+
+# ---------------------------------------------------------
+# 5) Insertar un nuevo MIE en BigQuery
 # ---------------------------------------------------------
 def insertar_mie(
     drm: str,
@@ -99,9 +117,10 @@ def insertar_mie(
 
 
 # ---------------------------------------------------------
-# 5) Insertar registro de foto en tabla mie_fotos
+# 6) Insertar registro de foto en tabla mie_fotos
+#     (guardamos blob_name, no URL pública)
 # ---------------------------------------------------------
-def insertar_foto(mie_id: int, tipo: str, url_foto: str):
+def insertar_foto(mie_id: int, tipo: str, blob_name: str):
     tabla = f"{PROJECT_ID}.{DATASET_ID}.mie_fotos"
     foto_id = obtener_siguiente_id("mie_fotos", "id")
     ahora = datetime.utcnow()
@@ -110,7 +129,7 @@ def insertar_foto(mie_id: int, tipo: str, url_foto: str):
         "id": foto_id,
         "mie_id": mie_id,
         "tipo": tipo,       # ANTES o DESPUES
-        "url_foto": url_foto,
+        "url_foto": blob_name,  # acá guardamos el nombre del objeto
         "fecha_hora": ahora.isoformat(),
     }]
 
@@ -120,7 +139,7 @@ def insertar_foto(mie_id: int, tipo: str, url_foto: str):
 
 
 # ---------------------------------------------------------
-# 6) Listar los últimos MIE (para historial)
+# 7) Listar los últimos MIE (para historial)
 # ---------------------------------------------------------
 def listar_mie():
     query = f"""
@@ -133,7 +152,7 @@ def listar_mie():
 
 
 # ---------------------------------------------------------
-# 7) Traer detalle de un MIE específico
+# 8) Traer detalle de un MIE específico
 # ---------------------------------------------------------
 def obtener_mie_detalle(mie_id: int):
     query = f"""
@@ -149,7 +168,7 @@ def obtener_mie_detalle(mie_id: int):
 
 
 # ---------------------------------------------------------
-# 8) Fotos asociadas a un MIE (todas)
+# 9) Fotos asociadas a un MIE (devolvemos URL firmada)
 # ---------------------------------------------------------
 def obtener_fotos_mie(mie_id: int):
     query = f"""
@@ -161,4 +180,30 @@ def obtener_fotos_mie(mie_id: int):
     job_config = bigquery.QueryJobConfig(
         query_parameters=[bigquery.ScalarQueryParameter("mie_id", "INT64", mie_id)]
     )
-    return list(bq_client.query(query, job_config=job_config).result())
+    rows = bq_client.query(query, job_config=job_config).result()
+
+    fotos = []
+    for row in rows:
+        raw = row.url_foto
+        if raw is None:
+            continue
+
+        # Compatibilidad por si ya tenías URLs completas guardadas
+        if raw.startswith("http"):
+            # Tratamos de sacar el blob_name después del nombre del bucket
+            marcador = f"/{BUCKET_NAME}/"
+            partes = raw.split(marcador, 1)
+            blob_name = partes[1] if len(partes) > 1 else raw
+        else:
+            blob_name = raw
+
+        url = generar_url_firmada(blob_name)
+
+        fotos.append({
+            "tipo": row.tipo,
+            "url": url,
+            "fecha_hora": row.fecha_hora,
+        })
+
+    return fotos
+
