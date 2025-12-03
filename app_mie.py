@@ -161,7 +161,7 @@ else:
                 observaciones_edit,
             )
             st.success("Cambios guardados correctamente.")
-            st.experimental_rerun()
+            st.rerun()
 
         # ---------------------------------------------------
         # FOTOS (ANTES / DESPUÉS)
@@ -218,11 +218,8 @@ else:
                             insertar_foto(mie_id, "DESPUES", blob_name)
 
                     st.success("MIE cerrado exitosamente.")
-                    st.experimental_rerun()
+                    st.rerun()
                 except Exception as e:
                     st.error(f"Error al cerrar el MIE: {e}")
         else:
             st.success("Este MIE ya está CERRADO.")
-
-
-
