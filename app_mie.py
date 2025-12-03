@@ -8,7 +8,10 @@ from mie_backend import (
     listar_mie,
     obtener_mie_detalle,
     obtener_fotos_mie,
+    actualizar_mie_basico,
+    cerrar_mie_con_remediacion,
 )
+
 
 st.set_page_config(page_title="MIE - Gestión de Derrames", layout="wide")
 
