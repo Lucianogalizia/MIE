@@ -99,6 +99,7 @@ if modo == "Nuevo MIE":
                 st.error(f"⚠️ Error guardando MIE: {e}")
 
 
+
 # =======================================================
 #  MODO 2 - HISTORIAL
 # =======================================================
@@ -110,16 +111,121 @@ else:
     if not registros:
         st.info("No hay MIE registrados todavía.")
     else:
+        # Selector
         opciones = {
             f"{r.codigo_mie} - {r.pozo} ({r.estado})": r.mie_id
             for r in registros
         }
-
         seleccion = st.selectbox("Seleccionar MIE", list(opciones.keys()))
         mie_id = opciones[seleccion]
 
         detalle = obtener_mie_detalle(mie_id)
         fotos = obtener_fotos_mie(mie_id)
+
+        # ---------------------------------------------------
+        # DATOS DEL MIE
+        # ---------------------------------------------------
+        st.subheader("📄 Datos del MIE")
+
+        col1, col2 = st.columns(2)
+
+        with col1:
+            drm_edit = st.text_input("DRM", detalle.drm)
+            pozo_edit = st.text_input("Pozo", detalle.pozo)
+            locacion_edit = st.text_input("Locación", detalle.locacion)
+            fluido_edit = st.text_input("Fluido", detalle.fluido)
+            volumen_edit = st.number_input(
+                "Volumen estimado (m³)", min_value=0.0, step=0.1,
+                value=float(detalle.volumen_estimado_m3 or 0)
+            )
+
+        with col2:
+            causa_edit = st.text_input("Causa probable", detalle.causa_probable)
+            responsable_edit = st.text_input("Responsable", detalle.responsable)
+            observaciones_edit = st.text_area(
+                "Observaciones adicionales", detalle.observaciones
+            )
+            st.write(f"**Estado:** {detalle.estado}")
+            st.write(f"**Creado por:** {detalle.creado_por}")
+            st.write(f"**Fecha evento:** {detalle.fecha_hora_evento}")
+            st.write(f"**Fecha carga:** {detalle.fecha_creacion_registro}")
+
+        if st.button("💾 Guardar cambios del MIE"):
+            actualizar_mie_basico(
+                mie_id,
+                drm_edit,
+                pozo_edit,
+                locacion_edit,
+                fluido_edit,
+                volumen_edit,
+                causa_edit,
+                responsable_edit,
+                observaciones_edit,
+            )
+            st.success("Cambios guardados correctamente.")
+            st.experimental_rerun()
+
+        # ---------------------------------------------------
+        # FOTOS
+        # ---------------------------------------------------
+        st.subheader("📸 Fotos asociadas")
+
+        if not fotos:
+            st.info("No hay fotos para este MIE.")
+        else:
+            for f in fotos:
+                st.markdown(f"**{f['tipo']}** – {f['fecha_hora']}")
+                st.image(f["data"], use_column_width=True)
+
+        # ---------------------------------------------------
+        # REMEDIACIÓN (solo si NO está cerrado)
+        # ---------------------------------------------------
+        if detalle.estado != "CERRADO":
+            st.subheader("🛠️ Remediación del Derrame")
+
+            colr1, colr2 = st.columns(2)
+
+            with colr1:
+                rem_fecha = st.date_input("Fecha de remediación", datetime.now())
+                rem_hora = st.time_input("Hora", datetime.now().time())
+
+            rem_fecha_final = datetime.combine(rem_fecha, rem_hora)
+            rem_responsable = st.text_input("Responsable de remediación")
+            rem_detalle = st.text_area("Detalle de la remediación")
+
+            st.markdown("### 📸 Fotos DESPUÉS")
+            fotos_despues = st.file_uploader(
+                "Subir fotos después de la remediación",
+                type=["jpg", "jpeg", "png"],
+                accept_multiple_files=True
+            )
+
+            if st.button("✔️ Guardar remediación y CERRAR MIE"):
+
+                # Guardamos remediación
+                cerrar_mie_con_remediacion(
+                    mie_id,
+                    rem_fecha_final,
+                    rem_responsable,
+                    rem_detalle
+                )
+
+                # Guardamos fotos DESPUÉS
+                if fotos_despues:
+                    codigo = detalle.codigo_mie
+                    for archivo in fotos_despues:
+                        nombre_destino = (
+                            f"{codigo}/DESPUES/"
+                            f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{archivo.name}"
+                        )
+                        blob_name = subir_foto_a_bucket(archivo, nombre_destino)
+                        insertar_foto(mie_id, "DESPUES", blob_name)
+
+                st.success("MIE cerrado exitosamente.")
+                st.experimental_rerun()
+
+        else:
+            st.success("Este MIE ya está CERRADO.")
 
         # ---------------------------------------------------
         # DATOS DEL MIE
