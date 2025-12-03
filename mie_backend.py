@@ -191,6 +191,7 @@ def obtener_fotos_mie(mie_id: int):
     return fotos
 
 
-    return fotos
+
+
 
 
