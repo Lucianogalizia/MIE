@@ -1,5 +1,5 @@
 # mie_backend.py
-from datetime import datetime, timedelta
+from datetime import datetime
 from io import BytesIO
 
 from google.cloud import bigquery, storage
@@ -52,26 +52,7 @@ def subir_foto_a_bucket(file_obj, nombre_destino: str) -> str:
 
 
 # ---------------------------------------------------------
-# 4) Generar URL firmada para un objeto
-# ---------------------------------------------------------
-def generar_url_firmada(blob_name: str) -> str:
-    """
-    Devuelve una URL firmada válida por 1 hora para leer la imagen.
-    No hace falta que el bucket sea público.
-    """
-    bucket = storage_client.bucket(BUCKET_NAME)
-    blob = bucket.blob(blob_name)
-
-    url = blob.generate_signed_url(
-        version="v4",
-        expiration=timedelta(hours=1),
-        method="GET",
-    )
-    return url
-
-
-# ---------------------------------------------------------
-# 5) Insertar un nuevo MIE en BigQuery
+# 4) Insertar un nuevo MIE en BigQuery
 # ---------------------------------------------------------
 def insertar_mie(
     drm: str,
@@ -117,8 +98,8 @@ def insertar_mie(
 
 
 # ---------------------------------------------------------
-# 6) Insertar registro de foto en tabla mie_fotos
-#     (guardamos blob_name, no URL pública)
+# 5) Insertar registro de foto en tabla mie_fotos
+#     (guardamos blob_name, no URL)
 # ---------------------------------------------------------
 def insertar_foto(mie_id: int, tipo: str, blob_name: str):
     tabla = f"{PROJECT_ID}.{DATASET_ID}.mie_fotos"
@@ -128,7 +109,7 @@ def insertar_foto(mie_id: int, tipo: str, blob_name: str):
     rows = [{
         "id": foto_id,
         "mie_id": mie_id,
-        "tipo": tipo,       # ANTES o DESPUES
+        "tipo": tipo,           # ANTES o DESPUES
         "url_foto": blob_name,  # acá guardamos el nombre del objeto
         "fecha_hora": ahora.isoformat(),
     }]
@@ -139,7 +120,7 @@ def insertar_foto(mie_id: int, tipo: str, blob_name: str):
 
 
 # ---------------------------------------------------------
-# 7) Listar los últimos MIE (para historial)
+# 6) Listar los últimos MIE (para historial)
 # ---------------------------------------------------------
 def listar_mie():
     query = f"""
@@ -152,7 +133,7 @@ def listar_mie():
 
 
 # ---------------------------------------------------------
-# 8) Traer detalle de un MIE específico
+# 7) Traer detalle de un MIE específico
 # ---------------------------------------------------------
 def obtener_mie_detalle(mie_id: int):
     query = f"""
@@ -168,9 +149,17 @@ def obtener_mie_detalle(mie_id: int):
 
 
 # ---------------------------------------------------------
-# 9) Fotos asociadas a un MIE (devolvemos URL firmada)
+# 8) Fotos asociadas a un MIE (descargamos bytes)
 # ---------------------------------------------------------
 def obtener_fotos_mie(mie_id: int):
+    """
+    Devuelve una lista de dicts:
+    {
+      "tipo": ...,
+      "fecha_hora": ...,
+      "data": bytes_de_la_imagen
+    }
+    """
     query = f"""
         SELECT tipo, url_foto, fecha_hora
         FROM `{PROJECT_ID}.{DATASET_ID}.mie_fotos`
@@ -182,28 +171,25 @@ def obtener_fotos_mie(mie_id: int):
     )
     rows = bq_client.query(query, job_config=job_config).result()
 
+    bucket = storage_client.bucket(BUCKET_NAME)
     fotos = []
+
     for row in rows:
-        raw = row.url_foto
-        if raw is None:
+        blob_name = row.url_foto
+        if not blob_name:
             continue
 
-        # Compatibilidad por si ya tenías URLs completas guardadas
-        if raw.startswith("http"):
-            # Tratamos de sacar el blob_name después del nombre del bucket
-            marcador = f"/{BUCKET_NAME}/"
-            partes = raw.split(marcador, 1)
-            blob_name = partes[1] if len(partes) > 1 else raw
-        else:
-            blob_name = raw
-
-        url = generar_url_firmada(blob_name)
+        blob = bucket.blob(blob_name)
+        data = blob.download_as_bytes()   # leemos la imagen
 
         fotos.append({
             "tipo": row.tipo,
-            "url": url,
             "fecha_hora": row.fecha_hora,
+            "data": data,
         })
+
+    return fotos
+
 
     return fotos
 
