@@ -150,6 +150,7 @@ else:
         st.subheader("📝 Observaciones")
         st.write(detalle.observaciones)
 
+
         # ---------------------------------------------------
         # FOTOS
         # ---------------------------------------------------
@@ -159,7 +160,7 @@ else:
             st.info("No hay fotos para este MIE.")
         else:
             for f in fotos:
-                st.markdown(f"**{f.tipo}** – {f.fecha_hora}")
-                st.image(f.url_foto, use_column_width=True)
+                st.markdown(f"**{f['tipo']}** – {f['fecha_hora']}")
+                st.image(f["url"], use_container_width=True)
 
 
