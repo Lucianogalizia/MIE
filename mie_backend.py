@@ -73,27 +73,71 @@ def insertar_mie(
     mie_id = obtener_siguiente_id("mie_eventos", "mie_id")
     codigo = generar_codigo_mie(mie_id)
     ahora = datetime.utcnow()
+    fecha_evento = fecha_hora_evento or ahora
 
-    rows = [{
-        "mie_id": mie_id,
-        "codigo_mie": codigo,
-        "drm": drm,
-        "pozo": pozo,
-        "locacion": locacion,
-        "fluido": fluido,
-        "volumen_estimado_m3": float(volumen_estimado_m3) if volumen_estimado_m3 else None,
-        "causa_probable": causa_probable,
-        "responsable": responsable,
-        "observaciones": observaciones,
-        "estado": "ABIERTO",
-        "creado_por": creado_por,
-        "fecha_hora_evento": (fecha_hora_evento or ahora).isoformat(),
-        "fecha_creacion_registro": ahora.isoformat(),
-    }]
+    query = f"""
+        INSERT INTO `{tabla}` (
+            mie_id,
+            codigo_mie,
+            drm,
+            pozo,
+            locacion,
+            fluido,
+            volumen_estimado_m3,
+            causa_probable,
+            responsable,
+            observaciones,
+            estado,
+            creado_por,
+            fecha_hora_evento,
+            fecha_creacion_registro
+        )
+        VALUES (
+            @mie_id,
+            @codigo_mie,
+            @drm,
+            @pozo,
+            @locacion,
+            @fluido,
+            @volumen,
+            @causa_probable,
+            @responsable,
+            @observaciones,
+            @estado,
+            @creado_por,
+            @fecha_evento,
+            @fecha_creacion
+        )
+    """
 
-    errors = bq_client.insert_rows_json(tabla, rows)
-    if errors:
-        raise RuntimeError(errors)
+    job_config = bigquery.QueryJobConfig(
+        query_parameters=[
+            bigquery.ScalarQueryParameter("mie_id", "INT64", mie_id),
+            bigquery.ScalarQueryParameter("codigo_mie", "STRING", codigo),
+            bigquery.ScalarQueryParameter("drm", "STRING", drm),
+            bigquery.ScalarQueryParameter("pozo", "STRING", pozo),
+            bigquery.ScalarQueryParameter("locacion", "STRING", locacion),
+            bigquery.ScalarQueryParameter("fluido", "STRING", fluido),
+            bigquery.ScalarQueryParameter(
+                "volumen",
+                "FLOAT64",
+                float(volumen_estimado_m3) if volumen_estimado_m3 is not None else None,
+            ),
+            bigquery.ScalarQueryParameter("causa_probable", "STRING", causa_probable),
+            bigquery.ScalarQueryParameter("responsable", "STRING", responsable),
+            bigquery.ScalarQueryParameter("observaciones", "STRING", observaciones),
+            bigquery.ScalarQueryParameter("estado", "STRING", "ABIERTO"),
+            bigquery.ScalarQueryParameter("creado_por", "STRING", creado_por),
+            bigquery.ScalarQueryParameter(
+                "fecha_evento", "TIMESTAMP", fecha_evento.isoformat()
+            ),
+            bigquery.ScalarQueryParameter(
+                "fecha_creacion", "TIMESTAMP", ahora.isoformat()
+            ),
+        ]
+    )
+
+    bq_client.query(query, job_config=job_config).result()
 
     return mie_id, codigo
 
