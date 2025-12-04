@@ -63,13 +63,17 @@ if modo == "Nuevo MIE":
         observador_apellido = st.text_input("Observador - Apellido")
     with col_obs2:
         observador_nombre = st.text_input("Observador - Nombre")
-    
+
     # Fila 2: Responsable de la instalación (Apellido / Nombre)
     col_resp1, col_resp2 = st.columns(2)
     with col_resp1:
-        responsable_inst_apellido = st.text_input("Responsable de la instalación - Apellido")
+        responsable_inst_apellido = st.text_input(
+            "Responsable de la instalación - Apellido"
+        )
     with col_resp2:
-        responsable_inst_nombre = st.text_input("Responsable de la instalación - Nombre")
+        responsable_inst_nombre = st.text_input(
+            "Responsable de la instalación - Nombre"
+        )
 
     # -----------------------
     # Ubicación / instalación
@@ -101,18 +105,40 @@ if modo == "Nuevo MIE":
         )
         tipo_derrame = st.selectbox(
             "Tipo de derrame",
-            ["", "Agua de Produccion", "Petroleo Hidratado", "Gas", "Otro (Detallar en notas)"],
+            [
+                "",
+                "Agua de Produccion",
+                "Petroleo Hidratado",
+                "Gas",
+                "Otro (Detallar en notas)",
+            ],
         )
     with col_t2:
         tipo_instalacion = st.selectbox(
             "Tipo de instalación",
-            ["", "Pozo", "Linea de conduccion", "Ducto", "Tanque",
-             "Separador", "Free-Water", "Planta", "Batería"],
+            [
+                "",
+                "Pozo",
+                "Linea de conduccion",
+                "Ducto",
+                "Tanque",
+                "Separador",
+                "Free-Water",
+                "Planta",
+                "Batería",
+            ],
         )
         causa_inmediata = st.selectbox(
             "Causa inmediata",
-            ["", "Corrosion", "Falla de Material", "Error de operación",
-             "Falla en sistemas de control", "Sabotaje", "Fuerza Mayor"],
+            [
+                "",
+                "Corrosion",
+                "Falla de Material",
+                "Error de operación",
+                "Falla en sistemas de control",
+                "Sabotaje",
+                "Fuerza Mayor",
+            ],
         )
 
     # -----------------------
@@ -121,13 +147,21 @@ if modo == "Nuevo MIE":
     st.markdown("### Volúmenes y área afectada")
     col_v1, col_v2, col_v3 = st.columns(3)
     with col_v1:
-        volumen_bruto_m3 = st.number_input("Volumen bruto (m³)", min_value=0.0, step=0.1)
-        volumen_crudo_m3 = st.number_input("Volumen de crudo (m³)", min_value=0.0, step=0.1)
+        volumen_bruto_m3 = st.number_input(
+            "Volumen bruto (m³)", min_value=0.0, step=0.1
+        )
+        volumen_crudo_m3 = st.number_input(
+            "Volumen de crudo (m³)", min_value=0.0, step=0.1
+        )
     with col_v2:
-        volumen_gas_m3 = st.number_input("Volumen de gas (m³)", min_value=0.0, step=1.0)
+        volumen_gas_m3 = st.number_input(
+            "Volumen de gas (m³)", min_value=0.0, step=1.0
+        )
         ppm_agua = st.text_input("PPM o % de agua")
     with col_v3:
-        area_afectada_m2 = st.number_input("Área afectada (m²)", min_value=0.0, step=1.0)
+        area_afectada_m2 = st.number_input(
+            "Área afectada (m²)", min_value=0.0, step=1.0
+        )
 
     # -----------------------
     # Recursos afectados
@@ -172,7 +206,7 @@ if modo == "Nuevo MIE":
         aprobador_apellido = st.text_input("Aprobador - Apellido")
     with col_a1b:
         aprobador_nombre = st.text_input("Aprobador - Nombre")
-    
+
     # Fila 2: Fecha / Hora aprobación
     col_a2a, col_a2b = st.columns(2)
     with col_a2a:
@@ -201,7 +235,9 @@ if modo == "Nuevo MIE":
 
     if btn_guardar:
         if not nombre_instalacion or not creado_por:
-            st.error("❌ Nombre de la instalación y Usuario que carga son obligatorios.")
+            st.error(
+                "❌ Nombre de la instalación y Usuario que carga son obligatorios."
+            )
         else:
             # Compatibilidad con campos viejos:
             pozo = nombre_instalacion
@@ -219,7 +255,6 @@ if modo == "Nuevo MIE":
                     observaciones=observaciones,
                     creado_por=creado_por,
                     fecha_hora_evento=fecha_hora_evento,
-
                     observador_apellido=observador_apellido or None,
                     observador_nombre=observador_nombre or None,
                     responsable_inst_apellido=responsable_inst_apellido or None,
@@ -268,7 +303,9 @@ if modo == "Nuevo MIE":
                             f"{codigo}/ANTES/"
                             f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{archivo.name}"
                         )
-                        blob_name = subir_foto_a_bucket(archivo, nombre_destino)
+                        blob_name = subir_foto_a_bucket(
+                            archivo, nombre_destino
+                        )
                         insertar_foto(mie_id, "ANTES", blob_name)
 
                     st.info(f"📁 Se guardaron {len(fotos)} fotos en la nube.")
@@ -294,7 +331,11 @@ else:
         # Combo de selección usando nombre de la instalación
         opciones = {}
         for r in registros:
-            nombre = getattr(r, "nombre_instalacion", None) or r.pozo or "(sin instalación)"
+            nombre = (
+                getattr(r, "nombre_instalacion", None)
+                or r.pozo
+                or "(sin instalación)"
+            )
             label = f"{r.codigo_mie} - {nombre} ({r.estado})"
             opciones[label] = r.mie_id
 
@@ -356,7 +397,7 @@ else:
                 getattr(detalle, "observador_nombre", "") or "",
                 disabled=True,
             )
-        
+
         # Fila 2: Responsable de la instalación
         colp2a, colp2b = st.columns(2)
         with colp2a:
@@ -544,47 +585,119 @@ else:
         # REMEDIACIÓN
         # ---------------------------------------------------
         if detalle.estado == "CERRADO":
-            st.subheader("✅ Datos de la remediación")
+            st.subheader("✅ Datos de remediación")
 
-            rem_fecha = getattr(detalle, "rem_fecha", None)
-            rem_responsable = getattr(detalle, "rem_responsable", None)
-            rem_detalle = getattr(detalle, "rem_detalle", None)
+            # Nuevos campos (con fallback a los viejos si no existen)
+            fecha_fin = getattr(
+                detalle, "rem_fecha_fin_saneamiento", None
+            ) or getattr(detalle, "rem_fecha", None)
+            vol_tierra = getattr(
+                detalle, "rem_volumen_tierra_levantada", None
+            )
+            destino_tierra = getattr(
+                detalle, "rem_destino_tierra_impactada", None
+            )
+            vol_liquido = getattr(
+                detalle, "rem_volumen_liquido_recuperado", None
+            )
+            comentarios = getattr(
+                detalle, "rem_comentarios", None
+            ) or getattr(detalle, "rem_detalle", None)
+            aprobador_apellido = getattr(
+                detalle, "rem_aprobador_apellido", None
+            )
+            aprobador_nombre = getattr(
+                detalle, "rem_aprobador_nombre", None
+            )
 
-            st.write(f"**Fecha remediación:** {rem_fecha or '-'}")
-            st.write(f"**Responsable remediación:** {rem_responsable or '-'}")
-            st.write("**Detalle:**")
-            st.write(rem_detalle or "-")
+            st.write(
+                f"**Fecha de finalización del saneamiento:** {fecha_fin or '-'}"
+            )
+            st.write(
+                f"**Volumen de tierra levantada (m³):** "
+                f"{vol_tierra if vol_tierra is not None else '-'}"
+            )
+            st.write(
+                f"**Destino de la tierra impactada:** {destino_tierra or '-'}"
+            )
+            st.write(
+                f"**Volumen de líquido recuperado (m³):** "
+                f"{vol_liquido if vol_liquido is not None else '-'}"
+            )
+            st.write("**Comentarios:**")
+            st.write(comentarios or "-")
+
+            st.write(
+                "**Aprobador final:** "
+                f"{(aprobador_apellido or '').strip()} "
+                f"{(aprobador_nombre or '').strip()}".strip()
+                or "-"
+            )
 
             st.success("Este MIE ya está CERRADO.")
+
         else:
             st.subheader("🛠️ Cargar remediación del Derrame")
 
+            # Fecha y hora de finalización del saneamiento
             colr1, colr2 = st.columns(2)
             with colr1:
-                rem_fecha = st.date_input(
-                    "Fecha de remediación",
+                fecha_fin = st.date_input(
+                    "Fecha de finalización del saneamiento",
                     datetime.now().date(),
-                    key=f"rem_fecha_hist_{mie_id}",
+                    key=f"rem_fecha_fin_{mie_id}",
                 )
-                rem_hora = st.time_input(
-                    "Hora",
+            with colr2:
+                hora_fin = st.time_input(
+                    "Hora de finalización",
                     datetime.now().time(),
-                    key=f"rem_hora_hist_{mie_id}",
+                    key=f"rem_hora_fin_{mie_id}",
                 )
 
-            rem_fecha_final = datetime.combine(rem_fecha, rem_hora)
-            rem_responsable = st.text_input(
-                "Responsable de remediación",
-                key=f"rem_responsable_hist_{mie_id}",
+            fecha_fin_dt = datetime.combine(fecha_fin, hora_fin)
+
+            # Volúmenes y destino
+            colv1r, colv2r = st.columns(2)
+            with colv1r:
+                vol_tierra = st.number_input(
+                    "Volumen de tierra levantada (m³)",
+                    min_value=0.0,
+                    step=0.1,
+                    key=f"rem_vol_tierra_{mie_id}",
+                )
+            with colv2r:
+                vol_liquido = st.number_input(
+                    "Volumen de líquido recuperado (m³)",
+                    min_value=0.0,
+                    step=0.1,
+                    key=f"rem_vol_liquido_{mie_id}",
+                )
+
+            destino_tierra = st.text_input(
+                "Destino de la tierra impactada",
+                key=f"rem_destino_tierra_{mie_id}",
             )
-            rem_detalle = st.text_area(
-                "Detalle de la remediación",
-                key=f"rem_detalle_hist_{mie_id}",
+
+            comentarios = st.text_area(
+                "Comentarios",
+                key=f"rem_comentarios_{mie_id}",
             )
+
+            colap1, colap2 = st.columns(2)
+            with colap1:
+                aprobador_final_apellido = st.text_input(
+                    "Aprobador final - Apellido",
+                    key=f"rem_aprob_ap_{mie_id}",
+                )
+            with colap2:
+                aprobador_final_nombre = st.text_input(
+                    "Aprobador final - Nombre",
+                    key=f"rem_aprob_nom_{mie_id}",
+                )
 
             st.markdown("### 📸 Fotos DESPUÉS")
             fotos_despues = st.file_uploader(
-                "Subir fotos después de la remediación",
+                "Subir fotos después del saneamiento",
                 type=["jpg", "jpeg", "png"],
                 accept_multiple_files=True,
                 key=f"fotos_despues_hist_{mie_id}",
@@ -597,9 +710,13 @@ else:
                 try:
                     cerrar_mie_con_remediacion(
                         mie_id,
-                        rem_fecha_final,
-                        rem_responsable,
-                        rem_detalle,
+                        fecha_fin_dt,
+                        vol_tierra,
+                        destino_tierra,
+                        vol_liquido,
+                        comentarios,
+                        aprobador_final_apellido,
+                        aprobador_final_nombre,
                     )
 
                     if fotos_despues:
@@ -609,13 +726,16 @@ else:
                                 f"{codigo}/DESPUES/"
                                 f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{archivo.name}"
                             )
-                            blob_name = subir_foto_a_bucket(archivo, nombre_destino)
+                            blob_name = subir_foto_a_bucket(
+                                archivo, nombre_destino
+                            )
                             insertar_foto(mie_id, "DESPUES", blob_name)
 
                     st.success("MIE cerrado exitosamente.")
                     st.rerun()
                 except Exception as e:
                     st.error(f"Error al cerrar el MIE: {e}")
+
 
 
 
