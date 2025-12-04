@@ -326,6 +326,9 @@ if modo == "Nuevo MIE":
     # ==================================================
     #  Generar PDF y ayudar a enviarlo por correo
     # ==================================================
+        # ==================================================
+    #  Generar PDF y ayudar a enviarlo por correo
+    # ==================================================
     st.markdown("### ✉️ Generar PDF y enviar por correo")
 
     if "ultimo_mie_id" not in st.session_state:
@@ -334,50 +337,58 @@ if modo == "Nuevo MIE":
         mie_id_envio = st.session_state["ultimo_mie_id"]
         codigo_envio = st.session_state.get("ultimo_codigo_mie", f"MIE_{mie_id_envio}")
 
-        # 1) Generar PDF en memoria
+        # 1) Traer detalle y fotos del MIE
         try:
-            pdf_bytes = generar_mie_pdf(mie_id_envio)
+            detalle_envio = obtener_mie_detalle(mie_id_envio)
+            fotos_envio = obtener_fotos_mie(mie_id_envio)
         except Exception as e:
-            st.error(f"⚠️ Error generando el PDF: {e}")
+            st.error(f"⚠️ Error obteniendo datos del MIE: {e}")
         else:
-            # 2) Botón para descargar el PDF
-            st.download_button(
-                "📄 Descargar PDF del MIE",
-                data=pdf_bytes,
-                file_name=f"{codigo_envio}.pdf",
-                mime="application/pdf",
-            )
-
-            st.markdown(
-                "Descargá el PDF y luego usá el botón de abajo para abrir tu correo y adjuntarlo."
-            )
-
-            # 3) Campo para correos + link mailto
-            destinatarios_text = st.text_input(
-                "Correos destinatarios (separados por coma)",
-                key="envio_destinatarios",
-            )
-
-            if destinatarios_text:
-                subject = f"MIE {codigo_envio}"
-                body = (
-                    f"Se adjunta el informe del MIE {codigo_envio}.\n\n"
-                    "Por favor, revisar el archivo PDF adjunto."
-                )
-                mailto_link = (
-                    "mailto:"
-                    + quote(destinatarios_text)
-                    + "?subject="
-                    + quote(subject)
-                    + "&body="
-                    + quote(body)
-                )
-
-                st.markdown(f"[✉️ Abrir cliente de correo]({mailto_link})")
+            # 2) Generar PDF en memoria (con foto)
+            try:
+                pdf_bytes = generar_mie_pdf(detalle_envio, fotos_envio)
+            except Exception as e:
+                st.error(f"⚠️ Error generando el PDF: {e}")
             else:
-                st.info(
-                    "Ingresá uno o más correos destinatarios para habilitar el botón de correo."
+                # 3) Botón para descargar el PDF
+                st.download_button(
+                    "📄 Descargar PDF del MIE",
+                    data=pdf_bytes,
+                    file_name=f"{codigo_envio}.pdf",
+                    mime="application/pdf",
                 )
+
+                st.markdown(
+                    "Descargá el PDF y luego usá el botón de abajo para abrir tu correo y adjuntarlo."
+                )
+
+                # 4) Campo para correos + link mailto
+                destinatarios_text = st.text_input(
+                    "Correos destinatarios (separados por coma)",
+                    key="envio_destinatarios",
+                )
+
+                if destinatarios_text:
+                    subject = f"MIE {codigo_envio}"
+                    body = (
+                        f"Se adjunta el informe del MIE {codigo_envio}.\n\n"
+                        "Por favor, revisar el archivo PDF adjunto."
+                    )
+                    mailto_link = (
+                        "mailto:"
+                        + quote(destinatarios_text)
+                        + "?subject="
+                        + quote(subject)
+                        + "&body="
+                        + quote(body)
+                    )
+
+                    st.markdown(f"[✉️ Abrir cliente de correo]({mailto_link})")
+                else:
+                    st.info(
+                        "Ingresá uno o más correos destinatarios para habilitar el botón de correo."
+                    )
+
 
 
 # =======================================================
