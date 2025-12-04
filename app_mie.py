@@ -1,5 +1,6 @@
 import streamlit as st
 from datetime import datetime, date, time
+from mie_pdf_email import enviar_mie_por_mail
 
 from mie_backend import (
     insertar_mie,
@@ -19,6 +20,9 @@ st.title("🛢️ Gestión de MIE (Derrames / DRM)")
 modo = st.sidebar.radio("Modo", ["Nuevo MIE", "Historial"])
 
 
+# =======================================================
+#  MODO 1 - NUEVO MIE
+# =======================================================
 # =======================================================
 #  MODO 1 - NUEVO MIE
 # =======================================================
@@ -231,6 +235,9 @@ if modo == "Nuevo MIE":
         accept_multiple_files=True,
     )
 
+    # -----------------------
+    # Botón GUARDAR
+    # -----------------------
     btn_guardar = st.button("Guardar MIE")
 
     if btn_guardar:
@@ -310,11 +317,41 @@ if modo == "Nuevo MIE":
 
                     st.info(f"📁 Se guardaron {len(fotos)} fotos en la nube.")
 
+                # Guardamos el último MIE en sesión (para envío por mail)
                 st.session_state["ultimo_mie_id"] = mie_id
                 st.session_state["ultimo_codigo_mie"] = codigo
 
             except Exception as e:
                 st.error(f"⚠️ Error guardando MIE: {e}")
+
+    # ==================================================
+    #  Enviar por mail el ÚLTIMO MIE guardado
+    # ==================================================
+    st.markdown("### ✉️ Enviar último MIE por mail")
+
+    destinatarios_text = st.text_input(
+        "Correos destinatarios (separados por coma)",
+        key="envio_destinatarios",
+    )
+
+    if st.button("Enviar por mail"):
+        if "ultimo_mie_id" not in st.session_state:
+            st.error("Primero guardá un MIE antes de enviarlo.")
+        else:
+            try:
+                lista_dest = [
+                    mail.strip()
+                    for mail in destinatarios_text.split(",")
+                    if mail.strip()
+                ]
+                if not lista_dest:
+                    st.error("Ingresá al menos un correo destinatario.")
+                else:
+                    mie_id_envio = st.session_state["ultimo_mie_id"]
+                    enviar_mie_por_mail(mie_id_envio, lista_dest)
+                    st.success("✅ Mail enviado correctamente con el PDF adjunto.")
+            except Exception as e:
+                st.error(f"⚠️ Error al enviar el mail: {e}")
 
 
 # =======================================================
