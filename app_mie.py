@@ -26,56 +26,219 @@ if modo == "Nuevo MIE":
 
     st.header("Registrar un nuevo MIE")
 
-    col1, col2 = st.columns(2)
+    # -----------------------
+    # Fecha y hora del evento
+    # -----------------------
+    st.markdown("### Datos básicos del incidente")
 
-    with col1:
-        drm = st.text_input("DRM / Código de incidente")
-        pozo = st.text_input("Pozo")
-        locacion = st.text_input("Locación")
-        fluido = st.text_input("Fluido", value="Petróleo + agua de formación")
-        volumen = st.number_input("Volumen estimado (m³)", min_value=0.0, step=0.1)
+    col_f1, col_f2 = st.columns(2)
+    with col_f1:
+        fecha_evento = st.date_input("Fecha del evento", value=date.today())
+    with col_f2:
+        hora_evento = st.time_input(
+            "Hora del evento",
+            value=datetime.now().time().replace(microsecond=0),
+        )
 
-    with col2:
-        causa_probable = st.text_input("Causa probable")
-        responsable = st.text_input("Responsable / Supervisor")
-        creado_por = st.text_input("Usuario que carga el MIE")
+    fecha_hora_evento = datetime.combine(fecha_evento, hora_evento)
 
-        fecha_defecto = date.today()
-        hora_defecto = datetime.now().time().replace(microsecond=0)
+    drm = st.text_input("Número de incidente / DRM")
+    creado_por = st.text_input("Usuario que carga el MIE")
 
-        fecha_evento = st.date_input("Fecha del evento", value=fecha_defecto)
-        hora_evento = st.time_input("Hora del evento", value=hora_defecto)
+    # -----------------------
+    # Personas involucradas
+    # -----------------------
+    st.markdown("### Personas involucradas")
+    col_p1, col_p2 = st.columns(2)
+    with col_p1:
+        observador_apellido = st.text_input("Observador - Apellido")
+        observador_nombre = st.text_input("Observador - Nombre")
+    with col_p2:
+        responsable_inst_apellido = st.text_input("Responsable de la instalación - Apellido")
+        responsable_inst_nombre = st.text_input("Responsable de la instalación - Nombre")
 
-        fecha_hora_evento = datetime.combine(fecha_evento, hora_evento)
+    # -----------------------
+    # Ubicación / instalación
+    # -----------------------
+    st.markdown("### Ubicación / instalación")
+    col_u1, col_u2, col_u3 = st.columns(3)
+    with col_u1:
+        yacimiento = st.text_input("Yacimiento")
+    with col_u2:
+        zona = st.text_input("Zona")
+    with col_u3:
+        nombre_instalacion = st.text_input("Nombre de la instalación")
 
-    observaciones = st.text_area("Observaciones adicionales")
+    col_geo1, col_geo2 = st.columns(2)
+    with col_geo1:
+        latitud = st.text_input("Latitud")
+    with col_geo2:
+        longitud = st.text_input("Longitud")
 
+    # -----------------------
+    # Características del evento
+    # -----------------------
+    st.markdown("### Características del evento")
+    col_t1, col_t2 = st.columns(2)
+    with col_t1:
+        tipo_afectacion = st.selectbox(
+            "Tipo de afectación",
+            ["", "Derrame", "Aventamiento de gas"],
+        )
+        tipo_derrame = st.selectbox(
+            "Tipo de derrame",
+            ["", "Agua de Produccion", "Petroleo Hidratado", "Gas", "Otro (Detallar en notas)"],
+        )
+    with col_t2:
+        tipo_instalacion = st.selectbox(
+            "Tipo de instalación",
+            ["", "Pozo", "Linea de conduccion", "Ducto", "Tanque",
+             "Separador", "Free-Water", "Planta", "Batería"],
+        )
+        causa_inmediata = st.selectbox(
+            "Causa inmediata",
+            ["", "Corrosion", "Falla de Material", "Error de operación",
+             "Falla en sistemas de control", "Sabotaje", "Fuerza Mayor"],
+        )
+
+    # -----------------------
+    # Volúmenes y área
+    # -----------------------
+    st.markdown("### Volúmenes y área afectada")
+    col_v1, col_v2, col_v3 = st.columns(3)
+    with col_v1:
+        volumen_bruto_m3 = st.number_input("Volumen bruto (m³)", min_value=0.0, step=0.1)
+        volumen_crudo_m3 = st.number_input("Volumen de crudo (m³)", min_value=0.0, step=0.1)
+    with col_v2:
+        volumen_gas_m3 = st.number_input("Volumen de gas (m³)", min_value=0.0, step=1.0)
+        ppm_agua = st.text_input("PPM o % de agua")
+    with col_v3:
+        area_afectada_m2 = st.number_input("Área afectada (m²)", min_value=0.0, step=1.0)
+
+    # -----------------------
+    # Recursos afectados
+    # -----------------------
+    st.markdown("### Recursos afectados")
+    recursos_sel = st.multiselect(
+        "Recursos afectados",
+        [
+            "Contenido en recinto",
+            "Instalaciones propias",
+            "Suelo",
+            "Aire",
+            "Flora",
+            "Curso de agua",
+            "Agua subsuperficial",
+            "Fauna",
+        ],
+    )
+    recursos_afectados = "|".join(recursos_sel) if recursos_sel else None
+
+    # -----------------------
+    # Otros datos / notas
+    # -----------------------
+    st.markdown("### Otros datos / notas")
+    causa_probable = st.text_input("Causa probable (texto libre)")
+    responsable = st.text_input("Responsable (texto libre)")
+    observaciones = st.text_area("Notas / Observaciones adicionales")
+    medidas_inmediatas = st.text_area("Medidas inmediatas adoptadas")
+
+    # Para compatibilidad: fluido y volumen_estimado_m3 siguen existiendo
+    fluido = st.text_input("Fluido", value="Petróleo + agua de formación")
+    volumen_estimado_m3 = volumen_bruto_m3  # usamos el bruto como estimado
+
+    # -----------------------
+    # Aprobación (opcional)
+    # -----------------------
+    st.markdown("### Aprobación (opcional)")
+    col_a1, col_a2 = st.columns(2)
+    with col_a1:
+        aprobador_apellido = st.text_input("Aprobador - Apellido")
+        aprobador_nombre = st.text_input("Aprobador - Nombre")
+    with col_a2:
+        fecha_aprob = st.date_input("Fecha aprobación", value=date.today())
+        hora_aprob = st.time_input(
+            "Hora aprobación",
+            value=datetime.now().time().replace(microsecond=0),
+        )
+
+    fecha_hora_aprobacion = None
+    if aprobador_apellido or aprobador_nombre:
+        fecha_hora_aprobacion = datetime.combine(fecha_aprob, hora_aprob)
+
+    # -----------------------
+    # Fotos ANTES
+    # -----------------------
     st.subheader("📸 Fotos del derrame (ANTES)")
     fotos = st.file_uploader(
         "Subir una o más fotos",
         type=["jpg", "jpeg", "png"],
-        accept_multiple_files=True
+        accept_multiple_files=True,
     )
 
     btn_guardar = st.button("Guardar MIE")
 
     if btn_guardar:
-        if not pozo or not locacion or not creado_por:
-            st.error("❌ Pozo, Locación y Usuario que carga son obligatorios.")
+        if not nombre_instalacion or not creado_por:
+            st.error("❌ Nombre de la instalación y Usuario que carga son obligatorios.")
         else:
+            # Compatibilidad con campos viejos:
+            pozo = nombre_instalacion if tipo_instalacion == "Pozo" else None
+            locacion = (f"{yacimiento or ''} - {zona or ''}").strip(" -") or None
+
             try:
                 mie_id, codigo = insertar_mie(
                     drm=drm,
                     pozo=pozo,
                     locacion=locacion,
                     fluido=fluido,
-                    volumen_estimado_m3=volumen,
+                    volumen_estimado_m3=volumen_estimado_m3,
                     causa_probable=causa_probable,
                     responsable=responsable,
                     observaciones=observaciones,
                     creado_por=creado_por,
                     fecha_hora_evento=fecha_hora_evento,
+
+                    observador_apellido=observador_apellido or None,
+                    observador_nombre=observador_nombre or None,
+                    responsable_inst_apellido=responsable_inst_apellido or None,
+                    responsable_inst_nombre=responsable_inst_nombre or None,
+                    yacimiento=yacimiento or None,
+                    zona=zona or None,
+                    nombre_instalacion=nombre_instalacion or None,
+                    latitud=latitud or None,
+                    longitud=longitud or None,
+                    tipo_afectacion=tipo_afectacion or None,
+                    tipo_derrame=tipo_derrame or None,
+                    tipo_instalacion=tipo_instalacion or None,
+                    causa_inmediata=causa_inmediata or None,
+                    volumen_bruto_m3=volumen_bruto_m3,
+                    volumen_gas_m3=volumen_gas_m3,
+                    ppm_agua=ppm_agua or None,
+                    volumen_crudo_m3=volumen_crudo_m3,
+                    area_afectada_m2=area_afectada_m2,
+                    recursos_afectados=recursos_afectados,
+                    magnitud=None,  # después definimos cálculo
+                    aviso_sen=None,
+                    difusion_mediatica=None,
+                    aviso_autoridad=None,
+                    aviso_autoridad_fecha_hora=None,
+                    aviso_autoridad_emisor=None,
+                    aviso_autoridad_medio=None,
+                    aviso_autoridad_organismo=None,
+                    aviso_autoridad_contacto=None,
+                    aviso_superficiario=None,
+                    aviso_superficiario_fecha_hora=None,
+                    aviso_superficiario_emisor=None,
+                    aviso_superficiario_medio=None,
+                    aviso_superficiario_organismo=None,
+                    aviso_superficiario_contacto=None,
+                    medidas_inmediatas=medidas_inmediatas or None,
+                    aprobador_apellido=aprobador_apellido or None,
+                    aprobador_nombre=aprobador_nombre or None,
+                    fecha_hora_aprobacion=fecha_hora_aprobacion,
                 )
+
                 st.success(f"✅ MIE guardado. CÓDIGO: {codigo} (ID={mie_id})")
 
                 if fotos:
@@ -212,7 +375,7 @@ else:
             fotos_despues = st.file_uploader(
                 "Subir fotos después de la remediación",
                 type=["jpg", "jpeg", "png"],
-                accept_multiple_files=True
+                accept_multiple_files=True,
             )
 
             if st.button("✔️ Guardar remediación y CERRAR MIE"):
@@ -238,5 +401,6 @@ else:
                     st.rerun()
                 except Exception as e:
                     st.error(f"Error al cerrar el MIE: {e}")
+
 
 
