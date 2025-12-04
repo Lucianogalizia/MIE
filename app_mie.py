@@ -331,27 +331,26 @@ if modo == "Nuevo MIE":
         st.info("👉 Primero guardá un MIE para poder generar el PDF.")
     else:
         mie_id_envio = st.session_state["ultimo_mie_id"]
-        codigo_envio = st.session_state.get("ultimo_codigo_mie", f"MIE_{mie_id_envio}")
 
         try:
-            # Traemos detalle y fotos del MIE
             detalle_envio = obtener_mie_detalle(mie_id_envio)
             fotos_envio = obtener_fotos_mie(mie_id_envio)
-
-            # ⚠ generar_mie_pdf espera el OBJETO detalle, no el ID
             pdf_bytes = generar_mie_pdf(detalle_envio, fotos_envio)
+        except Exception as e:
+            st.error(f"⚠️ Error generando el PDF: {e}")
+        else:
+            codigo_envio = getattr(detalle_envio, "codigo_mie", f"MIE_{mie_id_envio}")
 
-            # Nombre de la instalación para el nombre del archivo
             nombre_inst = (
                 (getattr(detalle_envio, "nombre_instalacion", None) or detalle_envio.pozo or "")
                 .strip()
             )
-            
+
             if nombre_inst:
                 file_name = f"{codigo_envio} - {nombre_inst}.pdf"
             else:
                 file_name = f"{codigo_envio}.pdf"
-            
+
             st.download_button(
                 "📄 Descargar PDF del MIE",
                 data=pdf_bytes,
@@ -679,31 +678,30 @@ else:
 
             st.success("Este MIE ya está CERRADO.")
 
-            # --------- PDF de este MIE (Historial) ----------
+            # ===== Botón para generar PDF de este MIE =====
             st.markdown("### 📄 Generar PDF de este MIE")
 
             try:
-                # acá usamos el OBJETO detalle y la lista de fotos
-                pdf_bytes = generar_mie_pdf(detalle, fotos)
-
-                # Nombre de la instalación para el nombre del archivo
+                pdf_bytes_hist = generar_mie_pdf(detalle, fotos)
+            except Exception as e:
+                st.error(f"⚠️ Error generando el PDF: {e}")
+            else:
                 nombre_inst = (
                     (getattr(detalle, "nombre_instalacion", None) or detalle.pozo or "")
                     .strip()
                 )
-                
+
                 if nombre_inst:
-                    file_name = f"{detalle.codigo_mie} - {nombre_inst}.pdf"
+                    file_name_hist = f"{detalle.codigo_mie} - {nombre_inst}.pdf"
                 else:
-                    file_name = f"{detalle.codigo_mie}.pdf"
-                
+                    file_name_hist = f"{detalle.codigo_mie}.pdf"
+
                 st.download_button(
                     "📄 Descargar PDF de este MIE",
-                    data=pdf_bytes,
-                    file_name=file_name,
+                    data=pdf_bytes_hist,
+                    file_name=file_name_hist,
                     mime="application/pdf",
                 )
-
 
         else:
             st.subheader("🛠️ Cargar remediación del Derrame")
@@ -804,6 +802,7 @@ else:
                     st.rerun()
                 except Exception as e:
                     st.error(f"Error al cerrar el MIE: {e}")
+
 
 
 
