@@ -1,6 +1,6 @@
 import streamlit as st
 from datetime import datetime, date, time
-from urllib.parse import quote   # para armar el mailto
+from urllib.parse import quote   # ya no lo usamos, pero no molesta
 
 from mie_backend import (
     insertar_mie,
@@ -316,7 +316,7 @@ if modo == "Nuevo MIE":
 
                     st.info(f"📁 Se guardaron {len(fotos)} fotos en la nube.")
 
-                # Guardamos el último MIE en sesión (para PDF/mailto)
+                # Guardamos el último MIE en sesión (para PDF)
                 st.session_state["ultimo_mie_id"] = mie_id
                 st.session_state["ultimo_codigo_mie"] = codigo
 
@@ -324,21 +324,20 @@ if modo == "Nuevo MIE":
                 st.error(f"⚠️ Error guardando MIE: {e}")
 
     # ==================================================
-    #  Generar PDF y ayudar a enviarlo por correo
-    # ==================================================
-    # ==================================================
     #  Generar PDF del último MIE guardado
     # ==================================================
     st.markdown("### 📄 Generar PDF del último MIE guardado")
-    
+
     if "ultimo_mie_id" not in st.session_state:
         st.info("👉 Primero guardá un MIE para poder generar el PDF.")
     else:
         mie_id_envio = st.session_state["ultimo_mie_id"]
         codigo_envio = st.session_state.get("ultimo_codigo_mie", f"MIE_{mie_id_envio}")
-    
+
         try:
-            pdf_bytes = generar_mie_pdf(mie_id_envio)
+            # Traemos las fotos desde la base/bucket
+            fotos_envio = obtener_fotos_mie(mie_id_envio)
+            pdf_bytes = generar_mie_pdf(mie_id_envio, fotos_envio)
         except Exception as e:
             st.error(f"⚠️ Error generando el PDF: {e}")
         else:
@@ -348,8 +347,6 @@ if modo == "Nuevo MIE":
                 file_name=f"{codigo_envio}.pdf",
                 mime="application/pdf",
             )
-
-
 
 
 # =======================================================
@@ -671,6 +668,21 @@ else:
 
             st.success("Este MIE ya está CERRADO.")
 
+            # --------- PDF de este MIE (Historial) ----------
+            st.markdown("### 📄 Generar PDF de este MIE")
+
+            try:
+                pdf_bytes = generar_mie_pdf(mie_id, fotos)
+            except Exception as e:
+                st.error(f"⚠️ Error generando el PDF: {e}")
+            else:
+                st.download_button(
+                    "📄 Descargar PDF de este MIE",
+                    data=pdf_bytes,
+                    file_name=f"{detalle.codigo_mie}.pdf",
+                    mime="application/pdf",
+                )
+
         else:
             st.subheader("🛠️ Cargar remediación del Derrame")
 
@@ -770,6 +782,7 @@ else:
                     st.rerun()
                 except Exception as e:
                     st.error(f"Error al cerrar el MIE: {e}")
+
 
 
 
