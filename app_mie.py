@@ -56,12 +56,19 @@ if modo == "Nuevo MIE":
     # Personas involucradas
     # -----------------------
     st.markdown("### Personas involucradas")
-    col_p1, col_p2 = st.columns(2)
-    with col_p1:
+
+    # Fila 1: Observador (Apellido / Nombre)
+    col_obs1, col_obs2 = st.columns(2)
+    with col_obs1:
         observador_apellido = st.text_input("Observador - Apellido")
+    with col_obs2:
         observador_nombre = st.text_input("Observador - Nombre")
-    with col_p2:
+    
+    # Fila 2: Responsable de la instalación (Apellido / Nombre)
+    col_resp1, col_resp2 = st.columns(2)
+    with col_resp1:
         responsable_inst_apellido = st.text_input("Responsable de la instalación - Apellido")
+    with col_resp2:
         responsable_inst_nombre = st.text_input("Responsable de la instalación - Nombre")
 
     # -----------------------
@@ -158,12 +165,19 @@ if modo == "Nuevo MIE":
     # Aprobación (opcional)
     # -----------------------
     st.markdown("### Aprobación (opcional)")
-    col_a1, col_a2 = st.columns(2)
-    with col_a1:
+
+    # Fila 1: Aprobador (Apellido / Nombre)
+    col_a1a, col_a1b = st.columns(2)
+    with col_a1a:
         aprobador_apellido = st.text_input("Aprobador - Apellido")
+    with col_a1b:
         aprobador_nombre = st.text_input("Aprobador - Nombre")
-    with col_a2:
+    
+    # Fila 2: Fecha / Hora aprobación
+    col_a2a, col_a2b = st.columns(2)
+    with col_a2a:
         fecha_aprob = st.date_input("Fecha aprobación", value=date.today())
+    with col_a2b:
         hora_aprob = st.time_input(
             "Hora aprobación",
             value=datetime.now().time().replace(microsecond=0),
@@ -327,24 +341,31 @@ else:
 
         # ----- Personas involucradas -----
         st.markdown("### Personas involucradas")
-        colp1, colp2 = st.columns(2)
-        with colp1:
+
+        # Fila 1: Observador
+        colp1a, colp1b = st.columns(2)
+        with colp1a:
             st.text_input(
                 "Observador - Apellido",
                 getattr(detalle, "observador_apellido", "") or "",
                 disabled=True,
             )
-            st.text_input(
-                "Responsable de la instalación - Apellido",
-                getattr(detalle, "responsable_inst_apellido", "") or "",
-                disabled=True,
-            )
-        with colp2:
+        with colp1b:
             st.text_input(
                 "Observador - Nombre",
                 getattr(detalle, "observador_nombre", "") or "",
                 disabled=True,
             )
+        
+        # Fila 2: Responsable de la instalación
+        colp2a, colp2b = st.columns(2)
+        with colp2a:
+            st.text_input(
+                "Responsable de la instalación - Apellido",
+                getattr(detalle, "responsable_inst_apellido", "") or "",
+                disabled=True,
+            )
+        with colp2b:
             st.text_input(
                 "Responsable de la instalación - Nombre",
                 getattr(detalle, "responsable_inst_nombre", "") or "",
