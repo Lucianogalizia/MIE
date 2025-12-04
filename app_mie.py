@@ -340,13 +340,22 @@ if modo == "Nuevo MIE":
 
             # ⚠ generar_mie_pdf espera el OBJETO detalle, no el ID
             pdf_bytes = generar_mie_pdf(detalle_envio, fotos_envio)
-        except Exception as e:
-            st.error(f"⚠️ Error generando el PDF: {e}")
-        else:
+
+            # Nombre de la instalación para el nombre del archivo
+            nombre_inst = (
+                (getattr(detalle_envio, "nombre_instalacion", None) or detalle_envio.pozo or "")
+                .strip()
+            )
+            
+            if nombre_inst:
+                file_name = f"{codigo_envio} - {nombre_inst}.pdf"
+            else:
+                file_name = f"{codigo_envio}.pdf"
+            
             st.download_button(
                 "📄 Descargar PDF del MIE",
                 data=pdf_bytes,
-                file_name=f"{codigo_envio}.pdf",
+                file_name=file_name,
                 mime="application/pdf",
             )
 
@@ -676,15 +685,25 @@ else:
             try:
                 # acá usamos el OBJETO detalle y la lista de fotos
                 pdf_bytes = generar_mie_pdf(detalle, fotos)
-            except Exception as e:
-                st.error(f"⚠️ Error generando el PDF: {e}")
-            else:
+
+                # Nombre de la instalación para el nombre del archivo
+                nombre_inst = (
+                    (getattr(detalle, "nombre_instalacion", None) or detalle.pozo or "")
+                    .strip()
+                )
+                
+                if nombre_inst:
+                    file_name = f"{detalle.codigo_mie} - {nombre_inst}.pdf"
+                else:
+                    file_name = f"{detalle.codigo_mie}.pdf"
+                
                 st.download_button(
                     "📄 Descargar PDF de este MIE",
                     data=pdf_bytes,
-                    file_name=f"{detalle.codigo_mie}.pdf",
+                    file_name=file_name,
                     mime="application/pdf",
                 )
+
 
         else:
             st.subheader("🛠️ Cargar remediación del Derrame")
