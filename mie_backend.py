@@ -344,7 +344,13 @@ def insertar_foto(mie_id: int, tipo: str, blob_name: str):
 # ---------------------------------------------------------
 def listar_mie():
     query = f"""
-        SELECT mie_id, codigo_mie, pozo, estado, fecha_creacion_registro
+        SELECT
+            mie_id,
+            codigo_mie,
+            pozo,
+            nombre_instalacion,
+            estado,
+            fecha_creacion_registro
         FROM `{PROJECT_ID}.{DATASET_ID}.mie_eventos`
         ORDER BY fecha_creacion_registro DESC
         LIMIT 300
