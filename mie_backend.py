@@ -112,6 +112,11 @@ def insertar_mie(
 
     mie_id = obtener_siguiente_id("mie_eventos", "mie_id")
     codigo = generar_codigo_mie(mie_id)
+
+    # Si el usuario no cargó DRM, lo generamos igual que el código MIE
+    if not drm:
+        drm = codigo
+
     ahora = datetime.utcnow()
     fecha_evento = fecha_hora_evento or ahora
 
