@@ -475,34 +475,70 @@ def actualizar_mie_basico(
 # ---------------------------------------------------------
 def cerrar_mie_con_remediacion(
     mie_id: int,
-    rem_fecha: datetime,
-    rem_responsable: str,
-    rem_detalle: str,
+    fecha_fin_saneamiento: datetime,
+    volumen_tierra_levantada: float | None,
+    destino_tierra_impactada: str | None,
+    volumen_liquido_recuperado: float | None,
+    comentarios: str | None,
+    aprobador_final_apellido: str | None,
+    aprobador_final_nombre: str | None,
 ):
+    tabla = f"{PROJECT_ID}.{DATASET_ID}.mie_eventos"
+
     query = f"""
-        UPDATE `{PROJECT_ID}.{DATASET_ID}.mie_eventos`
+        UPDATE `{tabla}`
         SET
-          rem_fecha = @rem_fecha,
-          rem_responsable = @rem_responsable,
-          rem_detalle = @rem_detalle,
-          estado = "CERRADO"
+          -- columnas nuevas
+          rem_fecha_fin_saneamiento      = @fecha_fin,
+          rem_volumen_tierra_levantada   = @vol_tierra,
+          rem_destino_tierra_impactada   = @destino_tierra,
+          rem_volumen_liquido_recuperado = @vol_liquido,
+          rem_comentarios                = @comentarios,
+          rem_aprobador_apellido         = @aprob_apellido,
+          rem_aprobador_nombre           = @aprob_nombre,
+          -- compatibilidad con columnas viejas (si existen)
+          rem_fecha      = @fecha_fin,
+          rem_responsable = CONCAT(
+              COALESCE(@aprob_apellido, ''), ' ', COALESCE(@aprob_nombre, '')
+          ),
+          rem_detalle    = @comentarios,
+          estado         = "CERRADO"
         WHERE mie_id = @mie_id
     """
 
     job_config = bigquery.QueryJobConfig(
         query_parameters=[
             bigquery.ScalarQueryParameter(
-                "rem_fecha", "TIMESTAMP", rem_fecha.isoformat()
+                "fecha_fin", "TIMESTAMP", fecha_fin_saneamiento.isoformat()
             ),
             bigquery.ScalarQueryParameter(
-                "rem_responsable", "STRING", rem_responsable
+                "vol_tierra",
+                "FLOAT64",
+                float(volumen_tierra_levantada) if volumen_tierra_levantada is not None else None,
             ),
-            bigquery.ScalarQueryParameter("rem_detalle", "STRING", rem_detalle),
+            bigquery.ScalarQueryParameter(
+                "destino_tierra", "STRING", destino_tierra_impactada
+            ),
+            bigquery.ScalarQueryParameter(
+                "vol_liquido",
+                "FLOAT64",
+                float(volumen_liquido_recuperado) if volumen_liquido_recuperado is not None else None,
+            ),
+            bigquery.ScalarQueryParameter(
+                "comentarios", "STRING", comentarios
+            ),
+            bigquery.ScalarQueryParameter(
+                "aprob_apellido", "STRING", aprobador_final_apellido
+            ),
+            bigquery.ScalarQueryParameter(
+                "aprob_nombre", "STRING", aprobador_final_nombre
+            ),
             bigquery.ScalarQueryParameter("mie_id", "INT64", mie_id),
         ]
     )
 
     bq_client.query(query, job_config=job_config).result()
+
 
 
 
