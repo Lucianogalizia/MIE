@@ -270,12 +270,15 @@ else:
     if not registros:
         st.info("No hay MIE registrados todavía.")
     else:
-        opciones = {
-            f"{r.codigo_mie} - {r.pozo} ({r.estado})": r.mie_id
-            for r in registros
-        }
+        opciones = {}
+        for r in registros:
+            nombre = getattr(r, "nombre_instalacion", None) or r.pozo or "(sin instalación)"
+            label = f"{r.codigo_mie} - {nombre} ({r.estado})"
+            opciones[label] = r.mie_id
+
         seleccion = st.selectbox("Seleccionar MIE", list(opciones.keys()))
         mie_id = opciones[seleccion]
+
 
         detalle = obtener_mie_detalle(mie_id)
         fotos = obtener_fotos_mie(mie_id)
