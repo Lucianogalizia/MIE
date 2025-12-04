@@ -1,120 +1,94 @@
 # mie_pdf_email.py
-import os
-import tempfile
-import smtplib
-from email.message import EmailMessage
-
+from io import BytesIO
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
+from datetime import datetime
 
 from mie_backend import obtener_mie_detalle
 
 
-# ==============================
-# CONFIG SMTP (completar vos)
-# ==============================
-SMTP_HOST = os.getenv("SMTP_HOST", "smtp.gmail.com")
-SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
-SMTP_USER = os.getenv("SMTP_USER", "TU_MAIL@empresa.com")
-SMTP_PASS = os.getenv("SMTP_PASS", "TU_PASSWORD")  # mejor usar variables de entorno
-
-
-# ------------------------------
-# Generar PDF de un MIE
-# ------------------------------
-def generar_pdf_mie(mie_id: int) -> str:
+def generar_mie_pdf(mie_id: int) -> BytesIO:
     """
-    Arma un PDF simple con los datos del MIE y devuelve
-    la ruta del archivo generado (en /tmp).
+    Genera un PDF simple con los datos principales del MIE
+    y devuelve un BytesIO listo para usar en st.download_button.
     """
     detalle = obtener_mie_detalle(mie_id)
-    if not detalle:
-        raise ValueError(f"No se encontró el MIE con id {mie_id}")
+    buffer = BytesIO()
+    c = canvas.Canvas(buffer, pagesize=A4)
 
-    # Archivo temporal
-    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
-    pdf_path = tmp.name
-    tmp.close()
+    width, height = A4
+    x = 50
+    y = height - 50
 
-    c = canvas.Canvas(pdf_path, pagesize=A4)
-    text = c.beginText(40, 800)
-    text.setFont("Helvetica", 10)
+    def line(text: str):
+        nonlocal y
+        c.drawString(x, y, text)
+        y -= 15
 
-    def add(label, value):
-        text.textLine(f"{label}: {'' if value is None else str(value)}")
+    codigo = detalle.codigo_mie
+    fecha_evento = detalle.fecha_hora_evento
+    fecha_str = str(fecha_evento) if fecha_evento else "-"
 
-    add("Código MIE", detalle.codigo_mie)
-    add("Estado", detalle.estado)
-    add("Usuario que carga", detalle.creado_por)
-    add("Fecha evento", detalle.fecha_hora_evento)
-    add("Fecha carga", detalle.fecha_creacion_registro)
+    c.setFont("Helvetica-Bold", 14)
+    line(f"MIE - {codigo}")
+    c.setFont("Helvetica", 10)
+    line(f"Fecha de generación PDF: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')} UTC")
+    y -= 10
 
-    add("Yacimiento", getattr(detalle, "yacimiento", None))
-    add("Zona", getattr(detalle, "zona", None))
-    add("Nombre instalación", getattr(detalle, "nombre_instalacion", None))
+    c.setFont("Helvetica-Bold", 12)
+    line("Datos básicos del incidente")
+    c.setFont("Helvetica", 10)
+    line(f"Usuario que carga: {detalle.creado_por or '-'}")
+    line(f"Fecha del evento: {fecha_str}")
+    line(f"Fecha de carga: {detalle.fecha_creacion_registro or '-'}")
+    y -= 10
 
-    add("Tipo de afectación", getattr(detalle, "tipo_afectacion", None))
-    add("Tipo de derrame", getattr(detalle, "tipo_derrame", None))
-    add("Tipo de instalación", getattr(detalle, "tipo_instalacion", None))
-    add("Causa inmediata", getattr(detalle, "causa_inmediata", None))
+    c.setFont("Helvetica-Bold", 12)
+    line("Ubicación / instalación")
+    c.setFont("Helvetica", 10)
+    line(f"Yacimiento: {getattr(detalle, 'yacimiento', '') or '-'}")
+    line(f"Zona: {getattr(detalle, 'zona', '') or '-'}")
+    line(f"Instalación: {getattr(detalle, 'nombre_instalacion', '') or '-'}")
+    line(f"Latitud: {getattr(detalle, 'latitud', '') or '-'}")
+    line(f"Longitud: {getattr(detalle, 'longitud', '') or '-'}")
+    y -= 10
 
-    add("Volumen bruto (m3)", getattr(detalle, "volumen_bruto_m3", None))
-    add("Volumen crudo (m3)", getattr(detalle, "volumen_crudo_m3", None))
-    add("Volumen gas (m3)", getattr(detalle, "volumen_gas_m3", None))
-    add("PPM / % agua", getattr(detalle, "ppm_agua", None))
-    add("Área afectada (m2)", getattr(detalle, "area_afectada_m2", None))
+    c.setFont("Helvetica-Bold", 12)
+    line("Características del evento")
+    c.setFont("Helvetica", 10)
+    line(f"Tipo de afectación: {getattr(detalle, 'tipo_afectacion', '') or '-'}")
+    line(f"Tipo de derrame: {getattr(detalle, 'tipo_derrame', '') or '-'}")
+    line(f"Tipo de instalación: {getattr(detalle, 'tipo_instalacion', '') or '-'}")
+    line(f"Causa inmediata: {getattr(detalle, 'causa_inmediata', '') or '-'}")
+    y -= 10
 
-    add("Causa probable", detalle.causa_probable)
-    add("Responsable (texto libre)", detalle.responsable)
-    add("Notas / Observaciones", detalle.observaciones)
-    add("Medidas inmediatas", getattr(detalle, "medidas_inmediatas", None))
+    c.setFont("Helvetica-Bold", 12)
+    line("Volúmenes y área afectada")
+    c.setFont("Helvetica", 10)
+    line(f"Volumen bruto (m³): {getattr(detalle, 'volumen_bruto_m3', '') or '-'}")
+    line(f"Volumen crudo (m³): {getattr(detalle, 'volumen_crudo_m3', '') or '-'}")
+    line(f"Volumen gas (m³): {getattr(detalle, 'volumen_gas_m3', '') or '-'}")
+    line(f"PPM / % agua: {getattr(detalle, 'ppm_agua', '') or '-'}")
+    line(f"Área afectada (m²): {getattr(detalle, 'area_afectada_m2', '') or '-'}")
+    y -= 10
 
-    c.drawText(text)
+    c.setFont("Helvetica-Bold", 12)
+    line("Otros datos / notas")
+    c.setFont("Helvetica", 10)
+    line(f"Causa probable: {detalle.causa_probable or '-'}")
+    line(f"Responsable (texto): {detalle.responsable or '-'}")
+
+    obs = (detalle.observaciones or "").strip()
+    if obs:
+        y -= 10
+        c.setFont("Helvetica-Bold", 10)
+        line("Observaciones:")
+        c.setFont("Helvetica", 9)
+        for parrafo in obs.split("\n"):
+            line(parrafo[:110])  # corta para que no se vaya de ancho
+
     c.showPage()
     c.save()
+    buffer.seek(0)
+    return buffer
 
-    return pdf_path
-
-
-# ------------------------------
-# Enviar mail con adjunto PDF
-# ------------------------------
-def enviar_mie_por_mail(mie_id: int, destinatarios: list[str]):
-    """
-    Genera el PDF del MIE indicado y lo envía por mail
-    a la lista de destinatarios.
-    """
-    if not destinatarios:
-        raise ValueError("No se especificaron destinatarios")
-
-    pdf_path = generar_pdf_mie(mie_id)
-    detalle = obtener_mie_detalle(mie_id)
-
-    asunto = f"MIE {detalle.codigo_mie} - {getattr(detalle, 'nombre_instalacion', '')}"
-    cuerpo = (
-        f"Se adjunta el registro del MIE {detalle.codigo_mie}.\n\n"
-        f"Creado por: {detalle.creado_por}\n"
-        f"Fecha evento: {detalle.fecha_hora_evento}\n"
-        f"Yacimiento: {getattr(detalle, 'yacimiento', '')}\n"
-        f"Zona: {getattr(detalle, 'zona', '')}\n"
-    )
-
-    msg = EmailMessage()
-    msg["Subject"] = asunto
-    msg["From"] = SMTP_USER
-    msg["To"] = ", ".join(destinatarios)
-    msg.set_content(cuerpo)
-
-    with open(pdf_path, "rb") as f:
-        data = f.read()
-        msg.add_attachment(
-            data,
-            maintype="application",
-            subtype="pdf",
-            filename=os.path.basename(pdf_path),
-        )
-
-    with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
-        server.starttls()
-        server.login(SMTP_USER, SMTP_PASS)
-        server.send_message(msg)
