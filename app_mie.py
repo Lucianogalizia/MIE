@@ -163,7 +163,7 @@ else:
             st.success("Cambios guardados correctamente.")
             st.rerun()
 
-        # ---------------------------------------------------
+       
         # FOTOS (ANTES / DESPUÉS)
         # ---------------------------------------------------
         st.subheader("📸 Fotos asociadas")
@@ -176,10 +176,27 @@ else:
                 st.image(f["data"], use_container_width=True)
 
         # ---------------------------------------------------
-        # REMEDIACIÓN (si no está cerrado)
+        # MOSTRAR DATOS DE REMEDIACIÓN (si existen)
+        # ---------------------------------------------------
+        tiene_remediacion = (
+            getattr(detalle, "rem_fecha", None) is not None
+            or getattr(detalle, "rem_responsable", None)
+            or getattr(detalle, "rem_detalle", None)
+        )
+
+        if tiene_remediacion:
+            st.subheader("✅ Datos de la remediación")
+
+            st.write(f"**Fecha remediación:** {detalle.rem_fecha}")
+            st.write(f"**Responsable remediación:** {detalle.rem_responsable}")
+            st.write("**Detalle:**")
+            st.write(detalle.rem_detalle)
+
+        # ---------------------------------------------------
+        # FORMULARIO DE REMEDIACIÓN (solo si NO está cerrado)
         # ---------------------------------------------------
         if detalle.estado != "CERRADO":
-            st.subheader("🛠️ Remediación del Derrame")
+            st.subheader("🛠️ Cargar remediación del Derrame")
 
             colr1, colr2 = st.columns(2)
 
@@ -223,3 +240,4 @@ else:
                     st.error(f"Error al cerrar el MIE: {e}")
         else:
             st.success("Este MIE ya está CERRADO.")
+
