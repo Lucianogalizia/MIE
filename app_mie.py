@@ -39,10 +39,17 @@ if modo == "Nuevo MIE":
             "Hora del evento",
             value=datetime.now().time().replace(microsecond=0),
         )
-
+    
     fecha_hora_evento = datetime.combine(fecha_evento, hora_evento)
-
-    drm = st.text_input("Número de incidente / DRM")
+    
+    # El número de incidente se genera automáticamente al guardar
+    st.text_input(
+        "Número de incidente / DRM",
+        value="Se genera automáticamente al guardar",
+        disabled=True,
+    )
+    drm = None  # no lo carga el usuario
+    
     creado_por = st.text_input("Usuario que carga el MIE")
 
     # -----------------------
@@ -537,8 +544,18 @@ else:
 
             colr1, colr2 = st.columns(2)
             with colr1:
-                rem_fecha = st.date_input("Fecha de remediación", datetime.now())
-                rem_hora = st.time_input("Hora", datetime.now().time())
+                rem_fecha = st.date_input(
+                    "Fecha de remediación",
+                    datetime.now().date(),
+                    key=f"rem_fecha_hist_{mie_id}",
+                )
+
+                rem_hora = st.time_input(
+                    "Hora",
+                    datetime.now().time(),
+                    key=f"rem_hora_hist_{mie_id}",
+                )
+
 
             rem_fecha_final = datetime.combine(rem_fecha, rem_hora)
             rem_responsable = st.text_input("Responsable de remediación")
