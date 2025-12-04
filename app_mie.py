@@ -163,7 +163,7 @@ else:
             st.success("Cambios guardados correctamente.")
             st.rerun()
 
-       
+        # ---------------------------------------------------
         # FOTOS (ANTES / DESPUÉS)
         # ---------------------------------------------------
         st.subheader("📸 Fotos asociadas")
@@ -176,26 +176,26 @@ else:
                 st.image(f["data"], use_container_width=True)
 
         # ---------------------------------------------------
-        # MOSTRAR DATOS DE REMEDIACIÓN (si existen)
+        # DATOS DE REMEDIACIÓN (mostrar cuando esté cerrado)
         # ---------------------------------------------------
-        tiene_remediacion = (
-            getattr(detalle, "rem_fecha", None) is not None
-            or getattr(detalle, "rem_responsable", None)
-            or getattr(detalle, "rem_detalle", None)
-        )
-
-        if tiene_remediacion:
+        if detalle.estado == "CERRADO":
             st.subheader("✅ Datos de la remediación")
 
-            st.write(f"**Fecha remediación:** {detalle.rem_fecha}")
-            st.write(f"**Responsable remediación:** {detalle.rem_responsable}")
+            rem_fecha = getattr(detalle, "rem_fecha", None)
+            rem_responsable = getattr(detalle, "rem_responsable", None)
+            rem_detalle = getattr(detalle, "rem_detalle", None)
+
+            st.write(f"**Fecha remediación:** {rem_fecha or '-'}")
+            st.write(f"**Responsable remediación:** {rem_responsable or '-'}")
             st.write("**Detalle:**")
-            st.write(detalle.rem_detalle)
+            st.write(rem_detalle or "-")
+
+            st.success("Este MIE ya está CERRADO.")
 
         # ---------------------------------------------------
         # FORMULARIO DE REMEDIACIÓN (solo si NO está cerrado)
         # ---------------------------------------------------
-        if detalle.estado != "CERRADO":
+        else:
             st.subheader("🛠️ Cargar remediación del Derrame")
 
             colr1, colr2 = st.columns(2)
@@ -238,6 +238,5 @@ else:
                     st.rerun()
                 except Exception as e:
                     st.error(f"Error al cerrar el MIE: {e}")
-        else:
-            st.success("Este MIE ya está CERRADO.")
+
 
