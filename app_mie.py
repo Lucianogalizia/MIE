@@ -1,6 +1,5 @@
 import streamlit as st
 from datetime import datetime, date, time
-from urllib.parse import quote   # ya no lo usamos, pero no molesta
 
 from mie_backend import (
     insertar_mie,
@@ -335,9 +334,12 @@ if modo == "Nuevo MIE":
         codigo_envio = st.session_state.get("ultimo_codigo_mie", f"MIE_{mie_id_envio}")
 
         try:
-            # Traemos las fotos desde la base/bucket
+            # Traemos detalle y fotos del MIE
+            detalle_envio = obtener_mie_detalle(mie_id_envio)
             fotos_envio = obtener_fotos_mie(mie_id_envio)
-            pdf_bytes = generar_mie_pdf(mie_id_envio, fotos_envio)
+
+            # ⚠ generar_mie_pdf espera el OBJETO detalle, no el ID
+            pdf_bytes = generar_mie_pdf(detalle_envio, fotos_envio)
         except Exception as e:
             st.error(f"⚠️ Error generando el PDF: {e}")
         else:
@@ -672,7 +674,8 @@ else:
             st.markdown("### 📄 Generar PDF de este MIE")
 
             try:
-                pdf_bytes = generar_mie_pdf(mie_id, fotos)
+                # acá usamos el OBJETO detalle y la lista de fotos
+                pdf_bytes = generar_mie_pdf(detalle, fotos)
             except Exception as e:
                 st.error(f"⚠️ Error generando el PDF: {e}")
             else:
@@ -782,6 +785,7 @@ else:
                     st.rerun()
                 except Exception as e:
                     st.error(f"Error al cerrar el MIE: {e}")
+
 
 
 
