@@ -27,7 +27,7 @@ if modo == "Nuevo MIE":
     st.header("Registrar un nuevo MIE")
 
     # -----------------------
-    # Fecha y hora del evento
+    # Datos básicos del incidente
     # -----------------------
     st.markdown("### Datos básicos del incidente")
 
@@ -39,9 +39,9 @@ if modo == "Nuevo MIE":
             "Hora del evento",
             value=datetime.now().time().replace(microsecond=0),
         )
-    
+
     fecha_hora_evento = datetime.combine(fecha_evento, hora_evento)
-    
+
     # El número de incidente se genera automáticamente al guardar
     st.text_input(
         "Número de incidente / DRM",
@@ -49,7 +49,7 @@ if modo == "Nuevo MIE":
         disabled=True,
     )
     drm = None  # no lo carga el usuario
-    
+
     creado_por = st.text_input("Usuario que carga el MIE")
 
     # -----------------------
@@ -150,7 +150,7 @@ if modo == "Nuevo MIE":
     observaciones = st.text_area("Notas / Observaciones adicionales")
     medidas_inmediatas = st.text_area("Medidas inmediatas adoptadas")
 
-    # Para compatibilidad: fluido y volumen_estimado_m3 siguen existiendo
+    # Compatibilidad: fluido y volumen_estimado_m3 siguen existiendo
     fluido = st.text_input("Fluido", value="Petróleo + agua de formación")
     volumen_estimado_m3 = volumen_bruto_m3  # usamos el bruto como estimado
 
@@ -225,7 +225,7 @@ if modo == "Nuevo MIE":
                     volumen_crudo_m3=volumen_crudo_m3,
                     area_afectada_m2=area_afectada_m2,
                     recursos_afectados=recursos_afectados,
-                    magnitud=None,  # después definimos cálculo
+                    magnitud=None,
                     aviso_sen=None,
                     difusion_mediatica=None,
                     aviso_autoridad=None,
@@ -266,9 +266,6 @@ if modo == "Nuevo MIE":
                 st.error(f"⚠️ Error guardando MIE: {e}")
 
 
-# =======================================================
-#  MODO 2 - HISTORIAL
-# =======================================================
 # =======================================================
 #  MODO 2 - HISTORIAL
 # =======================================================
@@ -523,7 +520,7 @@ else:
                 st.image(f["data"], use_container_width=True)
 
         # ---------------------------------------------------
-        # DATOS DE REMEDIACIÓN (mostrar cuando esté cerrado)
+        # REMEDIACIÓN
         # ---------------------------------------------------
         if detalle.estado == "CERRADO":
             st.subheader("✅ Datos de la remediación")
@@ -539,7 +536,6 @@ else:
 
             st.success("Este MIE ya está CERRADO.")
         else:
-            # Formulario de remediación igual que antes (si lo tenías)
             st.subheader("🛠️ Cargar remediación del Derrame")
 
             colr1, colr2 = st.columns(2)
@@ -549,26 +545,34 @@ else:
                     datetime.now().date(),
                     key=f"rem_fecha_hist_{mie_id}",
                 )
-
                 rem_hora = st.time_input(
                     "Hora",
                     datetime.now().time(),
                     key=f"rem_hora_hist_{mie_id}",
                 )
 
-
             rem_fecha_final = datetime.combine(rem_fecha, rem_hora)
-            rem_responsable = st.text_input("Responsable de remediación")
-            rem_detalle = st.text_area("Detalle de la remediación")
+            rem_responsable = st.text_input(
+                "Responsable de remediación",
+                key=f"rem_responsable_hist_{mie_id}",
+            )
+            rem_detalle = st.text_area(
+                "Detalle de la remediación",
+                key=f"rem_detalle_hist_{mie_id}",
+            )
 
             st.markdown("### 📸 Fotos DESPUÉS")
             fotos_despues = st.file_uploader(
                 "Subir fotos después de la remediación",
                 type=["jpg", "jpeg", "png"],
                 accept_multiple_files=True,
+                key=f"fotos_despues_hist_{mie_id}",
             )
 
-            if st.button("✔️ Guardar remediación y CERRAR MIE"):
+            if st.button(
+                "✔️ Guardar remediación y CERRAR MIE",
+                key=f"btn_cerrar_mie_{mie_id}",
+            ):
                 try:
                     cerrar_mie_con_remediacion(
                         mie_id,
@@ -592,69 +596,6 @@ else:
                 except Exception as e:
                     st.error(f"Error al cerrar el MIE: {e}")
 
-        # ---------------------------------------------------
-        # DATOS DE REMEDIACIÓN (mostrar cuando esté cerrado)
-        # ---------------------------------------------------
-        if detalle.estado == "CERRADO":
-            st.subheader("✅ Datos de la remediación")
-
-            rem_fecha = getattr(detalle, "rem_fecha", None)
-            rem_responsable = getattr(detalle, "rem_responsable", None)
-            rem_detalle = getattr(detalle, "rem_detalle", None)
-
-            st.write(f"**Fecha remediación:** {rem_fecha or '-'}")
-            st.write(f"**Responsable remediación:** {rem_responsable or '-'}")
-            st.write("**Detalle:**")
-            st.write(rem_detalle or "-")
-
-            st.success("Este MIE ya está CERRADO.")
-
-        # ---------------------------------------------------
-        # FORMULARIO DE REMEDIACIÓN (solo si NO está cerrado)
-        # ---------------------------------------------------
-        else:
-            st.subheader("🛠️ Cargar remediación del Derrame")
-
-            colr1, colr2 = st.columns(2)
-
-            with colr1:
-                rem_fecha = st.date_input("Fecha de remediación", datetime.now())
-                rem_hora = st.time_input("Hora", datetime.now().time())
-
-            rem_fecha_final = datetime.combine(rem_fecha, rem_hora)
-            rem_responsable = st.text_input("Responsable de remediación")
-            rem_detalle = st.text_area("Detalle de la remediación")
-
-            st.markdown("### 📸 Fotos DESPUÉS")
-            fotos_despues = st.file_uploader(
-                "Subir fotos después de la remediación",
-                type=["jpg", "jpeg", "png"],
-                accept_multiple_files=True,
-            )
-
-            if st.button("✔️ Guardar remediación y CERRAR MIE"):
-                try:
-                    cerrar_mie_con_remediacion(
-                        mie_id,
-                        rem_fecha_final,
-                        rem_responsable,
-                        rem_detalle,
-                    )
-
-                    if fotos_despues:
-                        codigo = detalle.codigo_mie
-                        for archivo in fotos_despues:
-                            nombre_destino = (
-                                f"{codigo}/DESPUES/"
-                                f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{archivo.name}"
-                            )
-                            blob_name = subir_foto_a_bucket(archivo, nombre_destino)
-                            insertar_foto(mie_id, "DESPUES", blob_name)
-
-                    st.success("MIE cerrado exitosamente.")
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"Error al cerrar el MIE: {e}")
 
 
 
