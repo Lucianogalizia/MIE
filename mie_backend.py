@@ -56,7 +56,7 @@ def subir_foto_a_bucket(file_obj, nombre_destino: str) -> str:
 # 4) Insertar un nuevo MIE en BigQuery (versión extendida)
 # ---------------------------------------------------------
 def insertar_mie(
-    drm: str,
+    drm: str | None,
     pozo: str | None,
     locacion: str | None,
     fluido: str,
