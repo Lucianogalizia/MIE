@@ -183,7 +183,7 @@ if modo == "Nuevo MIE":
             st.error("❌ Nombre de la instalación y Usuario que carga son obligatorios.")
         else:
             # Compatibilidad con campos viejos:
-            pozo = nombre_instalacion if tipo_instalacion == "Pozo" else None
+            pozo = nombre_instalacion
             locacion = (f"{yacimiento or ''} - {zona or ''}").strip(" -") or None
 
             try:
