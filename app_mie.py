@@ -2,6 +2,7 @@ import streamlit as st
 from datetime import datetime, date
 from io import BytesIO
 import pandas as pd
+import plotly.graph_objects as go
 
 # ==========================
 # CSS CORPORATIVO
