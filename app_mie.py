@@ -131,11 +131,11 @@ if not st.session_state["auth_ok"]:
             if pwd == APP_PASSWORD:
                 st.session_state["auth_ok"] = True
                 st.success("Acceso concedido.")
-                st.experimental_rerun()
+                st.rerun()   # 👈 antes decía st.experimental_rerun()
             else:
                 st.error("Contraseña incorrecta.")
 
-    st.stop()  # ⛔ no sigue cargando la app si no está autenticado
+    st.stop()
 
 # Si llegó acá, está autenticado
 from mie_backend import (
