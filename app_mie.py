@@ -313,7 +313,6 @@ if modo == "Nuevo IADE":
                 mime="application/pdf",
             )
 
-
 # =======================================================
 #  MODO 2 - HISTORIAL IADE
 # =======================================================
@@ -351,7 +350,7 @@ else:
             )
         with colb2:
             st.text_input(
-                "Usuario que carga el MIE",
+                "Usuario que carga el IADE",
                 detalle.creado_por or "",
                 disabled=True,
             )
@@ -373,7 +372,6 @@ else:
         # ----- Personas involucradas -----
         st.markdown("### Personas involucradas")
 
-        # Fila 1: Observador
         colp1a, colp1b = st.columns(2)
         with colp1a:
             st.text_input(
@@ -388,7 +386,6 @@ else:
                 disabled=True,
             )
 
-        # Fila 2: Responsable de la instalación
         colp2a, colp2b = st.columns(2)
         with colp2a:
             st.text_input(
@@ -510,19 +507,19 @@ else:
         coln1, coln2 = st.columns(2)
         with coln1:
             st.text_input(
-                "Causa probable (texto libre)",
+                "Causa probable",
                 detalle.causa_probable or "",
                 disabled=True,
             )
         with coln2:
             st.text_input(
-                "Responsable (texto libre)",
+                "Responsable",
                 detalle.responsable or "",
                 disabled=True,
             )
 
         st.text_area(
-            "Notas / Observaciones adicionales",
+            "Notas / Observaciones",
             detalle.observaciones or "",
             disabled=True,
         )
@@ -554,173 +551,161 @@ else:
                 disabled=True,
             )
 
-        st.write(f"**Estado:** {detalle.estado}")
-        st.write(f"**Creado por:** {detalle.creado_por}")
-        st.write(f"**Fecha evento:** {detalle.fecha_hora_evento}")
-        st.write(f"**Fecha carga:** {detalle.fecha_creacion_registro}")
-
         # ---------------------------------------------------
-        # FOTOS (ANTES / DESPUÉS)
+        # FOTOS ANTES / DESPUÉS
         # ---------------------------------------------------
         st.subheader("📸 Fotos asociadas")
 
-        if not fotos:
-            st.info("No hay fotos para este MIE.")
-        else:
-            for f in fotos:
-                st.markdown(f"**{f['tipo']}** – {f['fecha_hora']}")
+        fotos_antes = [f for f in fotos if f["tipo"] == "ANTES"]
+        fotos_despues = [f for f in fotos if f["tipo"] == "DESPUES"]
+
+        if fotos_antes:
+            st.markdown("#### Fotos del incidente (ANTES)")
+            for f in fotos_antes:
+                st.markdown(f"**{f['fecha_hora']}**")
+                st.image(f["data"], use_container_width=True)
+
+        if fotos_despues:
+            st.markdown("#### Fotos de remediación (DESPUÉS)")
+            for f in fotos_despues:
+                st.markdown(f"**{f['fecha_hora']}**")
                 st.image(f["data"], use_container_width=True)
 
         # ---------------------------------------------------
-        # REMEDIACIÓN
+        # BLOQUE DE REMEDIACIÓN
         # ---------------------------------------------------
         if detalle.estado == "CERRADO":
             st.subheader("✅ Datos de remediación")
 
-            # Nuevos campos (con fallback a los viejos si no existen)
-            fecha_fin = getattr(
-                detalle, "rem_fecha_fin_saneamiento", None
-            ) or getattr(detalle, "rem_fecha", None)
-            vol_tierra = getattr(
-                detalle, "rem_volumen_tierra_levantada", None
-            )
-            destino_tierra = getattr(
-                detalle, "rem_destino_tierra_impactada", None
-            )
-            vol_liquido = getattr(
-                detalle, "rem_volumen_liquido_recuperado", None
-            )
-            comentarios = getattr(
-                detalle, "rem_comentarios", None
-            ) or getattr(detalle, "rem_detalle", None)
-            aprobador_apellido = getattr(
-                detalle, "rem_aprobador_apellido", None
-            )
-            aprobador_nombre = getattr(
-                detalle, "rem_aprobador_nombre", None
-            )
+            # Campos remediación
+            fecha_fin = getattr(detalle, "rem_fecha_fin_saneamiento", None)
+            if not fecha_fin:
+                fecha_fin = getattr(detalle, "rem_fecha", None)
 
-            st.write(
-                f"**Fecha de finalización del saneamiento:** {fecha_fin or '-'}"
+            vol_tierra = getattr(detalle, "rem_volumen_tierra_levantada", None)
+            destino_tierra = getattr(detalle, "rem_destino_tierra_impactada", None)
+            vol_liquido = getattr(detalle, "rem_volumen_liquido_recuperado", None)
+            comentarios = (
+                getattr(detalle, "rem_comentarios", None)
+                or getattr(detalle, "rem_detalle", None)
             )
-            st.write(
-                f"**Volumen de tierra levantada (m³):** "
-                f"{vol_tierra if vol_tierra is not None else '-'}"
-            )
-            st.write(
-                f"**Destino de la tierra impactada:** {destino_tierra or '-'}"
-            )
-            st.write(
-                f"**Volumen de líquido recuperado (m³):** "
-                f"{vol_liquido if vol_liquido is not None else '-'}"
-            )
+            aprob_ap = getattr(detalle, "rem_aprobador_apellido", "")
+            aprob_no = getattr(detalle, "rem_aprobador_nombre", "")
+
+            st.write(f"**Fecha fin saneamiento:** {fecha_fin or '-'}")
+            st.write(f"**Volumen tierra levantada (m³):** {vol_tierra or '-'}")
+            st.write(f"**Destino tierra impactada:** {destino_tierra or '-'}")
+            st.write(f"**Volumen líquido recuperado (m³):** {vol_liquido or '-'}")
             st.write("**Comentarios:**")
             st.write(comentarios or "-")
+            st.write(f"**Aprobador final:** {aprob_ap} {aprob_no}")
 
-            st.write(
-                "**Aprobador final:** "
-                f"{(aprobador_apellido or '').strip()} "
-                f"{(aprobador_nombre or '').strip()}".strip()
-                or "-"
-            )
+            st.success("Este IADE ya está CERRADO.")
 
-            st.success("Este MIE ya está CERRADO.")
-
-            # ===== Botón para generar PDF de este MIE =====
-            st.markdown("### 📄 Generar PDF de este MIE")
+            # ---------------------------------------------------
+            # PDF FINAL DESDE HISTORIAL
+            # ---------------------------------------------------
+            st.subheader("📄 Generar PDF de este IADE")
 
             try:
                 pdf_bytes_hist = generar_mie_pdf(detalle, fotos)
             except Exception as e:
-                st.error(f"⚠️ Error generando el PDF: {e}")
+                st.error(f"⚠️ Error generando PDF: {e}")
             else:
                 nombre_inst = (
-                    (getattr(detalle, "nombre_instalacion", None) or detalle.pozo or "")
-                    .strip()
+                    getattr(detalle, "nombre_instalacion", None)
+                    or detalle.pozo
+                    or ""
+                ).strip()
+
+                file_name_hist = (
+                    f"{detalle.codigo_mie} - {nombre_inst}.pdf"
+                    if nombre_inst
+                    else f"{detalle.codigo_mie}.pdf"
                 )
 
-                if nombre_inst:
-                    file_name_hist = f"{detalle.codigo_mie} - {nombre_inst}.pdf"
-                else:
-                    file_name_hist = f"{detalle.codigo_mie}.pdf"
-
                 st.download_button(
-                    "📄 Descargar PDF de este MIE",
+                    "📄 Descargar PDF de este IADE",
                     data=pdf_bytes_hist,
                     file_name=file_name_hist,
                     mime="application/pdf",
                 )
 
+        # ---------------------------------------------------
+        # FORMULARIO PARA CERRAR (si aún está abierto)
+        # ---------------------------------------------------
         else:
-            st.subheader("🛠️ Cargar remediación del Derrame")
+            st.subheader("🛠️ Cargar datos de remediación y CERRAR IADE")
 
-            # Fecha y hora de finalización del saneamiento
+            # Fecha fin saneamiento
             colr1, colr2 = st.columns(2)
             with colr1:
                 fecha_fin = st.date_input(
-                    "Fecha de finalización del saneamiento",
+                    "Fecha finalización saneamiento",
                     datetime.now().date(),
-                    key=f"rem_fecha_fin_{mie_id}",
+                    key=f"rem_fecha_{mie_id}",
                 )
             with colr2:
                 hora_fin = st.time_input(
-                    "Hora de finalización",
+                    "Hora finalización",
                     datetime.now().time(),
-                    key=f"rem_hora_fin_{mie_id}",
+                    key=f"rem_hora_{mie_id}",
                 )
 
             fecha_fin_dt = datetime.combine(fecha_fin, hora_fin)
 
-            # Volúmenes y destino
+            # Volúmenes
             colv1r, colv2r = st.columns(2)
             with colv1r:
                 vol_tierra = st.number_input(
-                    "Volumen de tierra levantada (m³)",
+                    "Volumen tierra levantada (m³)",
                     min_value=0.0,
                     step=0.1,
-                    key=f"rem_vol_tierra_{mie_id}",
+                    key=f"vol_tierra_{mie_id}",
                 )
             with colv2r:
                 vol_liquido = st.number_input(
-                    "Volumen de líquido recuperado (m³)",
+                    "Volumen líquido recuperado (m³)",
                     min_value=0.0,
                     step=0.1,
-                    key=f"rem_vol_liquido_{mie_id}",
+                    key=f"vol_liq_{mie_id}",
                 )
 
             destino_tierra = st.text_input(
-                "Destino de la tierra impactada",
-                key=f"rem_destino_tierra_{mie_id}",
+                "Destino tierra impactada",
+                key=f"destino_{mie_id}",
             )
 
             comentarios = st.text_area(
-                "Comentarios",
-                key=f"rem_comentarios_{mie_id}",
+                "Comentarios de remediación",
+                key=f"coment_{mie_id}",
             )
 
             colap1, colap2 = st.columns(2)
             with colap1:
-                aprobador_final_apellido = st.text_input(
+                aprob_ap = st.text_input(
                     "Aprobador final - Apellido",
-                    key=f"rem_aprob_ap_{mie_id}",
+                    key=f"ap_ap_{mie_id}",
                 )
             with colap2:
-                aprobador_final_nombre = st.text_input(
+                aprob_no = st.text_input(
                     "Aprobador final - Nombre",
-                    key=f"rem_aprob_nom_{mie_id}",
+                    key=f"ap_no_{mie_id}",
                 )
 
-            st.markdown("### 📸 Fotos DESPUÉS")
+            # Fotos DESPUÉS
+            st.markdown("### 📸 Fotos DESPUÉS del Saneamiento")
             fotos_despues = st.file_uploader(
-                "Subir fotos después del saneamiento",
+                "Subir fotos",
                 type=["jpg", "jpeg", "png"],
                 accept_multiple_files=True,
-                key=f"fotos_despues_hist_{mie_id}",
+                key=f"fotos_desp_{mie_id}",
             )
 
+            # Botón cerrar
             if st.button(
-                "✔️ Guardar remediación y CERRAR MIE",
-                key=f"btn_cerrar_mie_{mie_id}",
+                "✔️ Guardar remediación y CERRAR IADE",
+                key=f"btn_cerrar_{mie_id}",
             ):
                 try:
                     cerrar_mie_con_remediacion(
@@ -730,10 +715,11 @@ else:
                         destino_tierra,
                         vol_liquido,
                         comentarios,
-                        aprobador_final_apellido,
-                        aprobador_final_nombre,
+                        aprob_ap,
+                        aprob_no,
                     )
 
+                    # Guardar fotos DESPUÉS
                     if fotos_despues:
                         codigo = detalle.codigo_mie
                         for archivo in fotos_despues:
@@ -741,15 +727,15 @@ else:
                                 f"{codigo}/DESPUES/"
                                 f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{archivo.name}"
                             )
-                            blob_name = subir_foto_a_bucket(
-                                archivo, nombre_destino
-                            )
+                            blob_name = subir_foto_a_bucket(archivo, nombre_destino)
                             insertar_foto(mie_id, "DESPUES", blob_name)
 
-                    st.success("MIE cerrado exitosamente.")
+                    st.success("IADE cerrado exitosamente.")
                     st.rerun()
+
                 except Exception as e:
-                    st.error(f"Error al cerrar el MIE: {e}")
+                    st.error(f"❌ Error al cerrar IADE: {e}")
+
 
 
 
