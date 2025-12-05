@@ -3,6 +3,115 @@ from datetime import datetime, date
 from io import BytesIO
 import pandas as pd
 
+# ==========================
+# CSS CORPORATIVO
+# ==========================
+st.markdown("""
+<style>
+
+    /* --- Fondo general --- */
+    .main {
+        background-color: #F5F5F7 !important;
+    }
+
+    /* --- Títulos principales --- */
+    h1, h2, h3 {
+        color: #003366 !important;    /* Azul petróleo corporativo */
+        font-weight: 700 !important;
+        letter-spacing: 0.5px;
+    }
+
+    /* --- Subtítulos --- */
+    h4, h5 {
+        color: #144877 !important;
+        font-weight: 600 !important;
+    }
+
+    /* --- Divider estilo auditoría --- */
+    hr {
+        border: 0;
+        height: 2px;
+        background: linear-gradient(to right, #003366, #005599, #003366);
+        margin-top: 20px;
+        margin-bottom: 20px;
+    }
+
+    /* --- Métricas (st.metric) --- */
+    div[data-testid="metric-container"] {
+        background: #FFFFFF;
+        padding: 15px 20px;
+        border-radius: 12px;
+        border-left: 5px solid #005599;
+        box-shadow: 0px 2px 8px rgba(0,0,0,0.10);
+        margin-bottom: 20px;
+    }
+
+    /* Valor del metric */
+    div[data-testid="metric-container"] > div:nth-child(2) {
+        color: #003366 !important;
+        font-size: 24px !important;
+        font-weight: 700 !important;
+    }
+
+    /* Texto del metric */
+    div[data-testid="metric-container"] > label {
+        color: #003366 !important;
+        font-size: 14px !important;
+        font-weight: 600 !important;
+    }
+
+    /* Delta del metric */
+    div[data-testid="metric-container"] svg {
+        color: #008000 !important;
+    }
+
+    /* --- Selectores (dropdowns) --- */
+    .stSelectbox div[role="combobox"] {
+        background-color: #ffffff !important;
+        border: 1px solid #888 !important;
+        border-radius: 8px !important;
+        padding: 5px !important;
+    }
+
+    /* --- Input de fechas --- */
+    .stDateInput input {
+        border-radius: 8px !important;
+        border: 1px solid #666 !important;
+    }
+
+    /* --- Tablas internas --- */
+    table {
+        border-collapse: collapse !important;
+        width: 100% !important;
+        background: #FFFFFF !important;
+        border-radius: 10px !important;
+        overflow: hidden !important;
+        box-shadow: 0px 2px 6px rgba(0,0,0,0.1);
+    }
+
+    thead tr {
+        background-color: #003366 !important;
+        color: white !important;
+    }
+
+    tbody tr:nth-child(even) {
+        background-color: #F2F5F9 !important;
+    }
+
+    tbody tr:hover {
+        background-color: #e6f0ff !important;
+    }
+
+    /* --- Gráficos --- */
+    img {
+        border-radius: 10px !important;
+        box-shadow: 0px 3px 10px rgba(0,0,0,0.15) !important;
+    }
+
+</style>
+""", unsafe_allow_html=True)
+
+
 from mie_backend import (
     insertar_mie,
     insertar_foto,
@@ -27,7 +136,7 @@ st.title("🌱 Gestión de IADE (Incidentes Ambientales Declarados)")
 
 modo = st.sidebar.radio(
     "Modo",
-    ["Nuevo IADE", "Historial", "Exportar IADE"]
+    ["Nuevo IADE", "Historial", "Estadísticas", "Exportar IADE"]
 )
 
 
@@ -742,6 +851,379 @@ elif modo == "Historial":
 
                 except Exception as e:
                     st.error(f"❌ Error al cerrar IADE: {e}")
+
+# =======================================================
+#  MODO 2.5 - ESTADISTICAS
+# =======================================================
+
+elif modo == "Estadísticas":
+    st.header("Estadísticas de IADE")
+
+    # ==========================
+    # 1) Cargar datos completos
+    # ==========================
+    from mie_backend import obtener_todos_mie
+    import pandas as pd
+
+    registros = obtener_todos_mie()
+    if not registros:
+        st.info("No hay IADE registrados para generar estadísticas.")
+        st.stop()
+
+    # Convertir a DataFrame
+    df = pd.DataFrame([dict(r) for r in registros])
+
+    # Asegurar fechas sin timezone
+    for col in ["fecha_hora_evento", "fecha_creacion_registro", "rem_fecha_fin_saneamiento"]:
+        if col in df.columns:
+            df[col] = pd.to_datetime(df[col], errors="coerce", utc=True).dt.tz_localize(None)
+
+    # ==========================
+    # 2) Filtros globales
+    # ==========================
+    st.subheader("Filtros")
+
+    col_f1, col_f2 = st.columns(2)
+
+    min_fecha = df["fecha_hora_evento"].min()
+    max_fecha = df["fecha_hora_evento"].max()
+
+    with col_f1:
+        fecha_desde, fecha_hasta = st.date_input(
+            "Rango de fechas del evento",
+            value=(min_fecha.date(), max_fecha.date()),
+        )
+
+    with col_f2:
+        yacimientos = sorted(df["yacimiento"].dropna().unique()) if "yacimiento" in df.columns else []
+        zonas = sorted(df["zona"].dropna().unique()) if "zona" in df.columns else []
+        tipos_inst = sorted(df["tipo_instalacion"].dropna().unique()) if "tipo_instalacion" in df.columns else []
+        estados = sorted(df["estado"].dropna().unique()) if "estado" in df.columns else []
+
+    col_ff3, col_ff4, col_ff5 = st.columns(3)
+
+    with col_ff3:
+        yac_sel = st.selectbox("Yacimiento", ["(Todos)"] + yacimientos)
+
+    with col_ff4:
+        zona_sel = st.selectbox("Zona", ["(Todos)"] + zonas)
+
+    with col_ff5:
+        tipo_inst_sel = st.selectbox("Tipo de instalación", ["(Todos)"] + tipos_inst)
+
+    estado_sel = st.selectbox("Estado del IADE", ["(Todos)"] + estados)
+
+    # Aplicar filtros
+    df_filt = df.copy()
+
+    df_filt = df_filt[
+        (df_filt["fecha_hora_evento"].dt.date >= fecha_desde) &
+        (df_filt["fecha_hora_evento"].dt.date <= fecha_hasta)
+    ]
+
+    if yac_sel != "(Todos)":
+        df_filt = df_filt[df_filt["yacimiento"] == yac_sel]
+
+    if zona_sel != "(Todos)":
+        df_filt = df_filt[df_filt["zona"] == zona_sel]
+
+    if tipo_inst_sel != "(Todos)":
+        df_filt = df_filt[df_filt["tipo_instalacion"] == tipo_inst_sel]
+
+    if estado_sel != "(Todos)":
+        df_filt = df_filt[df_filt["estado"] == estado_sel]
+
+    if df_filt.empty:
+        st.warning("No hay IADE que coincidan con los filtros seleccionados.")
+        st.stop()
+
+    # ============================================================
+    # 3) DASHBOARD EJECUTIVO (solo métricas clave)
+    # ============================================================
+    st.subheader("📊 Dashboard Ejecutivo (IADE)")
+
+    # MÉTRICAS BASE
+    total_iade = len(df_filt)
+    abiertos = len(df_filt[df_filt["estado"] == "ABIERTO"])
+    cerrados = len(df_filt[df_filt["estado"] == "CERRADO"])
+
+    # TIEMPO PROMEDIO DE CIERRE
+    df_cerrados = df_filt.dropna(subset=["rem_fecha_fin_saneamiento"])
+    if not df_cerrados.empty:
+        df_cerrados["dias_cierre"] = (
+            df_cerrados["rem_fecha_fin_saneamiento"] - df_cerrados["fecha_hora_evento"]
+        ).dt.days
+        promedio_cierre = round(df_cerrados["dias_cierre"].mean(), 1)
+    else:
+        promedio_cierre = "—"
+
+    # VOLUMEN ACTIVO Y REMEDIADO
+    volumen_activo = df_filt[df_filt["estado"] == "ABIERTO"]["volumen_estimado_m3"].sum()
+    volumen_remediado = (
+        df_filt["rem_volumen_liquido_recuperado"].fillna(0)
+        + df_filt["rem_volumen_tierra_levantada"].fillna(0)
+    ).sum()
+
+    # MAGNITUD
+    df_mag = df_filt["magnitud"].value_counts().to_dict()
+    n1 = df_mag.get("N1", 0)
+    n2 = df_mag.get("N2", 0)
+    n3 = df_mag.get("N3", 0)
+
+    def pct(v): return f"{(v / total_iade * 100):.1f}%" if total_iade > 0 else "0%"
+
+    # -------- Fila 1 --------
+    col1, col2, col3 = st.columns(3)
+    col1.metric("IADE Totales", total_iade)
+    col2.metric("IADE Abiertos", abiertos)
+    col3.metric("IADE Cerrados", cerrados)
+
+    # -------- Fila 2 --------
+    col4, col5, col6 = st.columns(3)
+    col4.metric("⏱️ Tiempo promedio de cierre (días)", promedio_cierre)
+    col5.metric("🛢️ Volumen activo (m³)", round(volumen_activo, 2))
+    col6.metric("♻️ Volumen remediado total (m³)", round(volumen_remediado, 2))
+
+    st.divider()
+
+    # -------- Magnitud --------
+    st.subheader("Distribución por Magnitud del Evento")
+    st.write(
+        f"""
+        **N1:** {n1} ({pct(n1)})  
+        **N2:** {n2} ({pct(n2)})  
+        **N3:** {n3} ({pct(n3)})  
+        """
+    )
+
+    st.divider()
+
+    # ============================================================
+    # 4) GRÁFICOS Y DISTRIBUCIONES
+    # ============================================================
+
+    # --------------------------
+    # Evolución mensual
+    # --------------------------
+    st.subheader("Evolución de IADE por mes")
+
+    import matplotlib.pyplot as plt
+
+    if "fecha_hora_evento" in df_filt.columns:
+        df_tmp = df_filt.copy()
+        df_tmp["mes"] = (
+            df_tmp["fecha_hora_evento"]
+            .dt.to_period("M")
+            .dt.to_timestamp()
+        )
+
+        df_mes_total = (
+            df_tmp
+            .groupby("mes")
+            .size()
+            .reset_index(name="total_iade")
+            .sort_values("mes")
+        )
+
+        if "estado" in df_tmp.columns:
+            df_cerr_tmp = df_tmp[df_tmp["estado"] == "CERRADO"].copy()
+            if not df_cerr_tmp.empty:
+                df_cerr_tmp["mes"] = (
+                    df_cerr_tmp["fecha_hora_evento"]
+                    .dt.to_period("M")
+                    .dt.to_timestamp()
+                )
+                df_mes_cerr = (
+                    df_cerr_tmp
+                    .groupby("mes")
+                    .size()
+                    .reset_index(name="cerrados_iade")
+                )
+            else:
+                df_mes_cerr = df_mes_total[["mes"]].copy()
+                df_mes_cerr["cerrados_iade"] = 0
+        else:
+            df_mes_cerr = df_mes_total[["mes"]].copy()
+            df_mes_cerr["cerrados_iade"] = 0
+
+        df_evo = df_mes_total.merge(df_mes_cerr, on="mes", how="left").fillna(0)
+
+        etiquetas_x = df_evo["mes"].dt.strftime("%Y-%m")
+        x_pos = range(len(etiquetas_x))
+
+        fig, ax1 = plt.subplots(figsize=(10, 4))
+
+        ax1.bar(x_pos, df_evo["total_iade"])
+        ax1.plot(x_pos, df_evo["cerrados_iade"], marker="o")
+
+        ax1.set_xticks(x_pos)
+        ax1.set_xticklabels(etiquetas_x, rotation=45, ha="right")
+        ax1.set_ylabel("Cantidad de IADE")
+        ax1.set_title("IADE totales y cerrados por mes")
+
+        for i, v in enumerate(df_evo["total_iade"]):
+            ax1.text(i, v + 0.1, str(int(v)), ha="center", va="bottom", fontsize=8)
+
+        st.pyplot(fig)
+    else:
+        st.info("No se encontró la columna 'fecha_hora_evento' para graficar evolución mensual.")
+
+    # --------------------------
+    # IADE por yacimiento
+    # --------------------------
+    st.subheader("Distribución de IADE por Yacimiento")
+
+    if "yacimiento" in df_filt.columns:
+        df_yac = (
+            df_filt
+            .groupby("yacimiento")
+            .size()
+            .reset_index(name="cantidad")
+            .sort_values("cantidad", ascending=False)
+        )
+
+        if not df_yac.empty:
+            fig, ax = plt.subplots(figsize=(8, 4))
+            ax.barh(df_yac["yacimiento"], df_yac["cantidad"])
+            ax.invert_yaxis()
+            ax.set_xlabel("Cantidad de IADE")
+            ax.set_ylabel("Yacimiento")
+            ax.set_title("IADE por Yacimiento")
+
+            for i, v in enumerate(df_yac["cantidad"]):
+                ax.text(v + 0.1, i, str(int(v)), va="center", fontsize=8)
+
+            st.pyplot(fig)
+        else:
+            st.info("No hay datos para mostrar por yacimiento.")
+    else:
+        st.info("No se encontró la columna 'yacimiento'.")
+
+    # --------------------------
+    # IADE por tipo de instalación
+    # --------------------------
+    st.subheader("Distribución de IADE por Tipo de Instalación")
+
+    if "tipo_instalacion" in df_filt.columns:
+        df_inst = (
+            df_filt
+            .groupby("tipo_instalacion")
+            .size()
+            .reset_index(name="cantidad")
+            .sort_values("cantidad", ascending=False)
+        )
+
+        if not df_inst.empty:
+            fig, ax = plt.subplots(figsize=(8, 4))
+            ax.bar(df_inst["tipo_instalacion"], df_inst["cantidad"])
+            ax.set_xlabel("Tipo de Instalación")
+            ax.set_ylabel("Cantidad de IADE")
+            ax.set_title("IADE por Tipo de Instalación")
+            plt.xticks(rotation=30, ha="right")
+
+            for i, v in enumerate(df_inst["cantidad"]):
+                ax.text(i, v + 0.2, str(int(v)), ha="center", fontsize=8)
+
+            st.pyplot(fig)
+        else:
+            st.info("No hay datos para mostrar por tipo de instalación.")
+    else:
+        st.info("No se encontró la columna 'tipo_instalacion'.")
+
+    # --------------------------
+    # IADE por causa inmediata
+    # --------------------------
+    st.subheader("Distribución de IADE por Causa Inmediata")
+
+    if "causa_inmediata" in df_filt.columns:
+        df_causa = (
+            df_filt
+            .groupby("causa_inmediata")
+            .size()
+            .reset_index(name="cantidad")
+            .sort_values("cantidad", ascending=False)
+        )
+
+        if not df_causa.empty:
+            fig, ax = plt.subplots(figsize=(8, 4))
+            ax.bar(df_causa["causa_inmediata"], df_causa["cantidad"])
+            ax.set_xlabel("Causa Inmediata")
+            ax.set_ylabel("Cantidad de IADE")
+            ax.set_title("IADE por Causa Inmediata")
+            plt.xticks(rotation=30, ha="right")
+
+            for i, v in enumerate(df_causa["cantidad"]):
+                ax.text(i, v + 0.2, str(int(v)), ha="center", fontsize=8)
+
+            st.pyplot(fig)
+        else:
+            st.info("No hay datos para mostrar por causa inmediata.")
+    else:
+        st.info("No se encontró la columna 'causa_inmediata'.")
+
+    # --------------------------
+    # IADE por tipo de afectación
+    # --------------------------
+    st.subheader("Distribución de IADE por Tipo de Afectación")
+
+    if "tipo_afectacion" in df_filt.columns:
+        df_afec = (
+            df_filt
+            .groupby("tipo_afectacion")
+            .size()
+            .reset_index(name="cantidad")
+            .sort_values("cantidad", ascending=False)
+        )
+
+        if not df_afec.empty:
+            fig, ax = plt.subplots(figsize=(8, 4))
+            ax.bar(df_afec["tipo_afectacion"], df_afec["cantidad"])
+            ax.set_xlabel("Tipo de Afectación")
+            ax.set_ylabel("Cantidad de IADE")
+            ax.set_title("IADE por Tipo de Afectación")
+            plt.xticks(rotation=30, ha="right")
+
+            for i, v in enumerate(df_afec["cantidad"]):
+                ax.text(i, v + 0.2, str(int(v)), ha="center", fontsize=8)
+
+            st.pyplot(fig)
+        else:
+            st.info("No hay datos para mostrar por tipo de afectación.")
+    else:
+        st.info("No se encontró la columna 'tipo_afectacion'.")
+
+    # --------------------------
+    # IADE por tipo de derrame
+    # --------------------------
+    st.subheader("Distribución de IADE por Tipo de Derrame")
+
+    if "tipo_derrame" in df_filt.columns:
+        df_der = (
+            df_filt
+            .groupby("tipo_derrame")
+            .size()
+            .reset_index(name="cantidad")
+            .sort_values("cantidad", ascending=False)
+        )
+
+        if not df_der.empty:
+            fig, ax = plt.subplots(figsize=(8, 4))
+            ax.bar(df_der["tipo_derrame"], df_der["cantidad"])
+            ax.set_xlabel("Tipo de Derrame")
+            ax.set_ylabel("Cantidad de IADE")
+            ax.set_title("IADE por Tipo de Derrame")
+            plt.xticks(rotation=30, ha="right")
+
+            for i, v in enumerate(df_der["cantidad"]):
+                ax.text(i, v + 0.2, str(int(v)), ha="center", fontsize=8)
+
+            st.pyplot(fig)
+        else:
+            st.info("No hay datos para mostrar por tipo de derrame.")
+    else:
+        st.info("No se encontró la columna 'tipo_derrame'.")
+
+            
 
 
 # =======================================================
