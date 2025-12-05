@@ -1,5 +1,7 @@
 import streamlit as st
 from datetime import datetime, date
+from io import BytesIO
+import pandas as pd
 
 from mie_backend import (
     insertar_mie,
@@ -10,7 +12,9 @@ from mie_backend import (
     obtener_fotos_mie,
     actualizar_mie_basico,
     cerrar_mie_con_remediacion,
+    obtener_todos_mie,      # 👈 NUEVO
 )
+
 
 from mie_pdf_email import generar_mie_pdf  # genera el PDF en memoria
 
@@ -21,7 +25,10 @@ st.set_page_config(page_title="IADE - Incidentes Ambientales Declarados", layout
 
 st.title("🌱 Gestión de IADE (Incidentes Ambientales Declarados)")
 
-modo = st.sidebar.radio("Modo", ["Nuevo IADE", "Historial"])
+modo = st.sidebar.radio(
+    "Modo",
+    ["Nuevo IADE", "Historial", "Exportar IADE"]
+)
 
 
 # =======================================================
@@ -735,6 +742,56 @@ else:
 
                 except Exception as e:
                     st.error(f"❌ Error al cerrar IADE: {e}")
+
+
+# =======================================================
+#  MODO 3 - EXPORTAR IADE A EXCEL
+# =======================================================
+elif modo == "Exportar IADE":
+    st.header("Exportar base de IADE a Excel")
+
+    st.markdown(
+        """
+        Esta opción exporta la tabla **mie_eventos** completa (sin fotos)
+        a un archivo Excel `.xlsx` para análisis o auditoría.
+        """
+    )
+
+    if st.button("Generar archivo Excel"):
+        try:
+            registros = obtener_todos_mie()
+
+            if not registros:
+                st.info("No hay registros de IADE para exportar.")
+            else:
+                # BigQuery Row -> dict -> DataFrame
+                filas = [dict(r) for r in registros]
+                df = pd.DataFrame(filas)
+
+                # Generar Excel en memoria
+                buffer = BytesIO()
+                with pd.ExcelWriter(buffer, engine="xlsxwriter") as writer:
+                    df.to_excel(writer, index=False, sheet_name="IADE")
+
+                buffer.seek(0)
+
+                nombre_archivo = (
+                    f"IADE_mie_eventos_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx"
+                )
+
+                st.download_button(
+                    "📥 Descargar Excel",
+                    data=buffer,
+                    file_name=nombre_archivo,
+                    mime=(
+                        "application/vnd.openxmlformats-officedocument."
+                        "spreadsheetml.sheet"
+                    ),
+                )
+
+        except Exception as e:
+            st.error(f"❌ Error al generar la exportación: {e}")
+
 
 
 
