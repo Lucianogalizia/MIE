@@ -1000,15 +1000,15 @@ elif modo == "Estadísticas":
     st.divider()
 
     # ============================================================
-    # 4) GRÁFICOS Y DISTRIBUCIONES
+    # 4) GRÁFICOS Y DISTRIBUCIONES (versión Plotly)
     # ============================================================
+    import plotly.graph_objects as go
+    import plotly.express as px
 
     # --------------------------
     # Evolución mensual
     # --------------------------
     st.subheader("Evolución de IADE por mes")
-
-    import matplotlib.pyplot as plt
 
     if "fecha_hora_evento" in df_filt.columns:
         df_tmp = df_filt.copy()
@@ -1018,6 +1018,7 @@ elif modo == "Estadísticas":
             .dt.to_timestamp()
         )
 
+        # Totales por mes
         df_mes_total = (
             df_tmp
             .groupby("mes")
@@ -1026,6 +1027,7 @@ elif modo == "Estadísticas":
             .sort_values("mes")
         )
 
+        # Cerrados por mes
         if "estado" in df_tmp.columns:
             df_cerr_tmp = df_tmp[df_tmp["estado"] == "CERRADO"].copy()
             if not df_cerr_tmp.empty:
@@ -1048,24 +1050,37 @@ elif modo == "Estadísticas":
             df_mes_cerr["cerrados_iade"] = 0
 
         df_evo = df_mes_total.merge(df_mes_cerr, on="mes", how="left").fillna(0)
+        df_evo["mes_str"] = df_evo["mes"].dt.strftime("%Y-%m")
 
-        etiquetas_x = df_evo["mes"].dt.strftime("%Y-%m")
-        x_pos = range(len(etiquetas_x))
+        fig = go.Figure()
 
-        fig, ax1 = plt.subplots(figsize=(10, 4))
+        # Barras: IADE totales
+        fig.add_trace(go.Bar(
+            x=df_evo["mes_str"],
+            y=df_evo["total_iade"],
+            name="IADE totales"
+        ))
 
-        ax1.bar(x_pos, df_evo["total_iade"])
-        ax1.plot(x_pos, df_evo["cerrados_iade"], marker="o")
+        # Línea: IADE cerrados
+        fig.add_trace(go.Scatter(
+            x=df_evo["mes_str"],
+            y=df_evo["cerrados_iade"],
+            mode="lines+markers+text",
+            name="IADE cerrados",
+            text=df_evo["cerrados_iade"],
+            textposition="top center"
+        ))
 
-        ax1.set_xticks(x_pos)
-        ax1.set_xticklabels(etiquetas_x, rotation=45, ha="right")
-        ax1.set_ylabel("Cantidad de IADE")
-        ax1.set_title("IADE totales y cerrados por mes")
+        fig.update_layout(
+            title="IADE totales y cerrados por mes",
+            xaxis_title="Mes",
+            yaxis_title="Cantidad de IADE",
+            template="plotly_white",
+            hovermode="x unified",
+            margin=dict(l=40, r=20, t=60, b=40)
+        )
 
-        for i, v in enumerate(df_evo["total_iade"]):
-            ax1.text(i, v + 0.1, str(int(v)), ha="center", va="bottom", fontsize=8)
-
-        st.pyplot(fig)
+        st.plotly_chart(fig, use_container_width=True)
     else:
         st.info("No se encontró la columna 'fecha_hora_evento' para graficar evolución mensual.")
 
@@ -1084,17 +1099,16 @@ elif modo == "Estadísticas":
         )
 
         if not df_yac.empty:
-            fig, ax = plt.subplots(figsize=(8, 4))
-            ax.barh(df_yac["yacimiento"], df_yac["cantidad"])
-            ax.invert_yaxis()
-            ax.set_xlabel("Cantidad de IADE")
-            ax.set_ylabel("Yacimiento")
-            ax.set_title("IADE por Yacimiento")
-
-            for i, v in enumerate(df_yac["cantidad"]):
-                ax.text(v + 0.1, i, str(int(v)), va="center", fontsize=8)
-
-            st.pyplot(fig)
+            fig_yac = px.bar(
+                df_yac,
+                x="cantidad",
+                y="yacimiento",
+                orientation="h",
+                title="IADE por Yacimiento",
+                labels={"cantidad": "Cantidad de IADE", "yacimiento": "Yacimiento"},
+            )
+            fig_yac.update_layout(template="plotly_white", margin=dict(l=40, r=20, t=60, b=40))
+            st.plotly_chart(fig_yac, use_container_width=True)
         else:
             st.info("No hay datos para mostrar por yacimiento.")
     else:
@@ -1115,17 +1129,19 @@ elif modo == "Estadísticas":
         )
 
         if not df_inst.empty:
-            fig, ax = plt.subplots(figsize=(8, 4))
-            ax.bar(df_inst["tipo_instalacion"], df_inst["cantidad"])
-            ax.set_xlabel("Tipo de Instalación")
-            ax.set_ylabel("Cantidad de IADE")
-            ax.set_title("IADE por Tipo de Instalación")
-            plt.xticks(rotation=30, ha="right")
-
-            for i, v in enumerate(df_inst["cantidad"]):
-                ax.text(i, v + 0.2, str(int(v)), ha="center", fontsize=8)
-
-            st.pyplot(fig)
+            fig_inst = px.bar(
+                df_inst,
+                x="tipo_instalacion",
+                y="cantidad",
+                title="IADE por Tipo de Instalación",
+                labels={"cantidad": "Cantidad de IADE", "tipo_instalacion": "Tipo de Instalación"},
+            )
+            fig_inst.update_layout(
+                template="plotly_white",
+                xaxis_tickangle=-30,
+                margin=dict(l=40, r=20, t=60, b=80),
+            )
+            st.plotly_chart(fig_inst, use_container_width=True)
         else:
             st.info("No hay datos para mostrar por tipo de instalación.")
     else:
@@ -1146,17 +1162,19 @@ elif modo == "Estadísticas":
         )
 
         if not df_causa.empty:
-            fig, ax = plt.subplots(figsize=(8, 4))
-            ax.bar(df_causa["causa_inmediata"], df_causa["cantidad"])
-            ax.set_xlabel("Causa Inmediata")
-            ax.set_ylabel("Cantidad de IADE")
-            ax.set_title("IADE por Causa Inmediata")
-            plt.xticks(rotation=30, ha="right")
-
-            for i, v in enumerate(df_causa["cantidad"]):
-                ax.text(i, v + 0.2, str(int(v)), ha="center", fontsize=8)
-
-            st.pyplot(fig)
+            fig_causa = px.bar(
+                df_causa,
+                x="causa_inmediata",
+                y="cantidad",
+                title="IADE por Causa Inmediata",
+                labels={"cantidad": "Cantidad de IADE", "causa_inmediata": "Causa Inmediata"},
+            )
+            fig_causa.update_layout(
+                template="plotly_white",
+                xaxis_tickangle=-30,
+                margin=dict(l=40, r=20, t=60, b=80),
+            )
+            st.plotly_chart(fig_causa, use_container_width=True)
         else:
             st.info("No hay datos para mostrar por causa inmediata.")
     else:
@@ -1177,17 +1195,19 @@ elif modo == "Estadísticas":
         )
 
         if not df_afec.empty:
-            fig, ax = plt.subplots(figsize=(8, 4))
-            ax.bar(df_afec["tipo_afectacion"], df_afec["cantidad"])
-            ax.set_xlabel("Tipo de Afectación")
-            ax.set_ylabel("Cantidad de IADE")
-            ax.set_title("IADE por Tipo de Afectación")
-            plt.xticks(rotation=30, ha="right")
-
-            for i, v in enumerate(df_afec["cantidad"]):
-                ax.text(i, v + 0.2, str(int(v)), ha="center", fontsize=8)
-
-            st.pyplot(fig)
+            fig_afec = px.bar(
+                df_afec,
+                x="tipo_afectacion",
+                y="cantidad",
+                title="IADE por Tipo de Afectación",
+                labels={"cantidad": "Cantidad de IADE", "tipo_afectacion": "Tipo de Afectación"},
+            )
+            fig_afec.update_layout(
+                template="plotly_white",
+                xaxis_tickangle=-30,
+                margin=dict(l=40, r=20, t=60, b=80),
+            )
+            st.plotly_chart(fig_afec, use_container_width=True)
         else:
             st.info("No hay datos para mostrar por tipo de afectación.")
     else:
@@ -1208,21 +1228,24 @@ elif modo == "Estadísticas":
         )
 
         if not df_der.empty:
-            fig, ax = plt.subplots(figsize=(8, 4))
-            ax.bar(df_der["tipo_derrame"], df_der["cantidad"])
-            ax.set_xlabel("Tipo de Derrame")
-            ax.set_ylabel("Cantidad de IADE")
-            ax.set_title("IADE por Tipo de Derrame")
-            plt.xticks(rotation=30, ha="right")
-
-            for i, v in enumerate(df_der["cantidad"]):
-                ax.text(i, v + 0.2, str(int(v)), ha="center", fontsize=8)
-
-            st.pyplot(fig)
+            fig_der = px.bar(
+                df_der,
+                x="tipo_derrame",
+                y="cantidad",
+                title="IADE por Tipo de Derrame",
+                labels={"cantidad": "Cantidad de IADE", "tipo_derrame": "Tipo de Derrame"},
+            )
+            fig_der.update_layout(
+                template="plotly_white",
+                xaxis_tickangle=-30,
+                margin=dict(l=40, r=20, t=60, b=80),
+            )
+            st.plotly_chart(fig_der, use_container_width=True)
         else:
             st.info("No hay datos para mostrar por tipo de derrame.")
     else:
         st.info("No se encontró la columna 'tipo_derrame'.")
+
 
             
 
