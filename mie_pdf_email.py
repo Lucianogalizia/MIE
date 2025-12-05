@@ -422,7 +422,10 @@ def generar_mie_pdf(detalle, fotos):
     # ------------------------------------------------------------------
     # 10. Remediación / Cierre (solo si realmente existe info)
     # ------------------------------------------------------------------
-    # Datos de remediación (campos nuevos + fallback)
+        # ------------------------------------------------------------------
+    # 10. Remediación / Cierre (solo si realmente existe info)
+    # ------------------------------------------------------------------
+
     rem_fecha = getattr(detalle, "rem_fecha_fin_saneamiento", None) or getattr(
         detalle, "rem_fecha", None
     )
@@ -435,85 +438,72 @@ def generar_mie_pdf(detalle, fotos):
     rem_ap_ap = getattr(detalle, "rem_aprobador_apellido", None)
     rem_ap_no = getattr(detalle, "rem_aprobador_nombre", None)
 
-    # ¿Hay remediación cargada o fotos DESPUES?
     fotos_despues = [f for f in fotos if f.get("tipo") == "DESPUES"]
-    hay_remediacion_datos = any(
-        [
-            rem_fecha,
-            rem_vol_tierra not in (None, 0),
-            rem_destino,
-            rem_vol_liq not in (None, 0),
-            rem_coment,
-            rem_ap_ap,
-            rem_ap_no,
-        ]
-    )
+    hay_remediacion_datos = any([
+        rem_fecha,
+        rem_vol_tierra not in (None, 0),
+        rem_destino,
+        rem_vol_liq not in (None, 0),
+        rem_coment,
+        rem_ap_ap,
+        rem_ap_no,
+    ])
     estado = getattr(detalle, "estado", "").upper()
 
     if hay_remediacion_datos or fotos_despues or estado == "CERRADO":
-        # 10. Remediación / Cierre
+
+        # === TÍTULO ===
         y = _ensure_space(c, y)
         c.setFont("Helvetica-Bold", 11)
         c.drawString(margen_x, y, "10. Remediación / Cierre")
-        y -= 0.6 * cm
+        y -= 0.8 * cm
+
+        linea_sep = 0.55 * cm  # separación más grande
 
         _draw_label_value(
-            c,
-            "Fecha fin saneamiento",
-            rem_fecha or "",
-            x_label,
-            x_value,
-            y,
+            c, "Fecha fin saneamiento", rem_fecha or "", x_label, x_value, y
         )
-        y -= 0.4 * cm
+        y -= linea_sep
+
         _draw_label_value(
-            c,
-            "Volumen de tierra levantada (m³)",
+            c, "Volumen de tierra levantada (m³)",
             rem_vol_tierra if rem_vol_tierra is not None else "",
-            x_label,
-            x_value,
-            y,
+            x_label, x_value, y
         )
-        y -= 0.4 * cm
-        _draw_label_value(
-            c,
-            "Destino de la tierra impactada",
-            rem_destino or "",
-            x_label,
-            x_value,
-            y,
-        )
-        y -= 0.4 * cm
-        _draw_label_value(
-            c,
-            "Volumen de líquido recuperado (m³)",
-            rem_vol_liq if rem_vol_liq is not None else "",
-            x_label,
-            x_value,
-            y,
-        )
-        y -= 0.5 * cm
+        y -= linea_sep
 
+        _draw_label_value(
+            c, "Destino de la tierra impactada", rem_destino or "",
+            x_label, x_value, y
+        )
+        y -= linea_sep
+
+        _draw_label_value(
+            c, "Volumen de líquido recuperado (m³)",
+            rem_vol_liq if rem_vol_liq is not None else "",
+            x_label, x_value, y
+        )
+        y -= (linea_sep + 0.2*cm)
+
+        # === Comentarios (párrafo multilinea con más separación) ===
         y = _draw_paragraph(
             c,
             "Comentarios de remediación",
             rem_coment or "",
             margen_x,
             y,
+            max_chars=85  # más ancho para evitar saltos feos
         )
+        y -= 0.3*cm
 
         aprobador_final = f"{(rem_ap_ap or '').strip()} {(rem_ap_no or '').strip()}".strip()
-        _draw_label_value(
-            c,
-            "Aprobador final",
-            aprobador_final,
-            x_label,
-            x_value,
-            y,
-        )
-        y -= 0.8 * cm
 
-        # 11. Fotos de la remediación (DESPUÉS)
+        _draw_label_value(
+            c, "Aprobador final", aprobador_final, x_label, x_value, y
+        )
+        y -= (linea_sep + 0.4*cm)
+
+        # === 11. Fotos de la remediación ===
         if fotos_despues:
             y = _draw_images_block(
                 c,
@@ -522,6 +512,7 @@ def generar_mie_pdf(detalle, fotos):
                 margen_x,
                 y,
             )
+
 
     c.showPage()
     c.save()
