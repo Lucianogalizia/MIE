@@ -292,3 +292,4 @@ def generar_mie_pdf(detalle, fotos):
 
 
 
+
