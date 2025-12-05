@@ -112,7 +112,32 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
+# ==========================
+#  LOGIN SIMPLE POR CONTRASEÑA
+# ==========================
+APP_PASSWORD = "MIE2025"  # 🔐 cambiala por la que quieras
 
+if "auth_ok" not in st.session_state:
+    st.session_state["auth_ok"] = False
+
+if not st.session_state["auth_ok"]:
+    st.title("Ingreso a Módulo IADE / MIE")
+
+    pwd = st.text_input("Contraseña", type="password")
+
+    col_btn1, col_btn2 = st.columns([1, 4])
+    with col_btn1:
+        if st.button("Ingresar"):
+            if pwd == APP_PASSWORD:
+                st.session_state["auth_ok"] = True
+                st.success("Acceso concedido.")
+                st.experimental_rerun()
+            else:
+                st.error("Contraseña incorrecta.")
+
+    st.stop()  # ⛔ no sigue cargando la app si no está autenticado
+
+# Si llegó acá, está autenticado
 from mie_backend import (
     insertar_mie,
     insertar_foto,
@@ -124,6 +149,7 @@ from mie_backend import (
     cerrar_mie_con_remediacion,
     obtener_todos_mie,      # 👈 NUEVO
 )
+
 
 
 from mie_pdf_email import generar_mie_pdf  # genera el PDF en memoria
