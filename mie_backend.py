@@ -398,7 +398,17 @@ def cerrar_mie_con_remediacion(
 
     bq_client.query(query, cfg).result()
 
-
+    
+# ---------------------------------------------------------
+# 11) Obtener todos los IADE (para exportar a Excel)
+# ---------------------------------------------------------
+def obtener_todos_mie():
+    query = f"""
+        SELECT *
+        FROM `{PROJECT_ID}.{DATASET_ID}.mie_eventos`
+        ORDER BY fecha_creacion_registro
+    """
+    return list(bq_client.query(query).result())
 
 
 
