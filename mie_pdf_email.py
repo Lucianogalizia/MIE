@@ -1,380 +1,534 @@
 # mie_pdf_email.py
+
 from io import BytesIO
+from reportlab.lib.pagesizes import A4
+from reportlab.pdfgen import canvas
+from reportlab.lib.units import cm
+from reportlab.lib.utils import ImageReader
 from datetime import datetime
 
-from reportlab.lib.pagesizes import A4
-from reportlab.platypus import (
-    SimpleDocTemplate,
-    Paragraph,
-    Spacer,
-    Table,
-    TableStyle,
-    Image,
-)
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib.units import cm
-from reportlab.lib import colors
+
+def _wrap_text(text, max_chars=90):
+    """Divide un texto largo en líneas más cortas."""
+    if not text:
+        return []
+    lines = []
+    for raw_line in str(text).split("\n"):
+        line = raw_line.strip()
+        while len(line) > max_chars:
+            # cortamos por el último espacio antes del límite
+            corte = line.rfind(" ", 0, max_chars)
+            if corte == -1:
+                corte = max_chars
+            lines.append(line[:corte])
+            line = line[corte:].lstrip()
+        if line:
+            lines.append(line)
+    return lines
+
+
+def _draw_label_value(c, label, value, x_label, x_value, y):
+    """Imprime una línea 'label: valor'."""
+    c.setFont("Helvetica-Bold", 9)
+    c.drawString(x_label, y, label)
+    c.setFont("Helvetica", 9)
+    if value is not None:
+        c.drawString(x_value, y, str(value))
+
+
+def _ensure_space(c, y, min_y=2*cm):
+    """Si no hay espacio suficiente en la página, crea una nueva."""
+    if y < min_y:
+        c.showPage()
+        return A4[1] - 2.5*cm  # y inicial nueva página
+    return y
+
+
+def _draw_paragraph(c, title, text, x, y, max_chars=90):
+    """Imprime un título y un párrafo multilínea."""
+    y = _ensure_space(c, y)
+    c.setFont("Helvetica-Bold", 10)
+    c.drawString(x, y, title)
+    y -= 0.5*cm
+
+    c.setFont("Helvetica", 9)
+    for line in _wrap_text(text, max_chars=max_chars):
+        y = _ensure_space(c, y)
+        c.drawString(x, y, line)
+        y -= 0.4*cm
+    return y
+
+
+def _draw_images_block(c, titulo, fotos, x, y, max_width=16*cm, max_height=8*cm):
+    """
+    Dibuja un bloque de fotos (ANTES o DESPUÉS).
+    'fotos' es una lista de dicts con keys: tipo, fecha_hora, data.
+    """
+    if not fotos:
+        return y
+
+    y = _ensure_space(c, y)
+    c.setFont("Helvetica-Bold", 10)
+    c.drawString(x, y, titulo)
+    y -= 0.7*cm
+
+    for idx, foto in enumerate(fotos, start=1):
+        y = _ensure_space(c, y, min_y=6*cm)  # necesitamos más lugar para la imagen
+        # Texto arriba de la foto
+        c.setFont("Helvetica", 9)
+        fecha_txt = foto.get("fecha_hora", "")
+        c.drawString(x, y, f"Foto {idx} - {fecha_txt}")
+        y -= 0.5*cm
+
+        # Imagen
+        try:
+            img_data = foto.get("data")
+            if img_data:
+                img = ImageReader(BytesIO(img_data))
+                iw, ih = img.getSize()
+                escala = min(max_width / iw, max_height / ih)
+                w = iw * escala
+                h = ih * escala
+
+                # Si no entra, pasamos a página nueva
+                if y - h < 2*cm:
+                    c.showPage()
+                    y = A4[1] - 2.5*cm
+
+                c.drawImage(
+                    img,
+                    x,
+                    y - h,
+                    width=w,
+                    height=h,
+                    preserveAspectRatio=True,
+                    mask="auto",
+                )
+                y -= h + 0.7*cm
+        except Exception:
+            # Si falla la imagen, seguimos sin cortar el PDF
+            y -= 0.5*cm
+
+    return y
 
 
 def generar_mie_pdf(detalle, fotos):
     """
-    Genera un PDF prolijo con:
+    Genera un PDF con:
       - Datos del incidente
-      - Fotos del incidente (ANTES)
-      - Datos de remediación (si existen)
-      - Fotos de remediación (DESPUÉS)
+      - Fotos ANTES
+      - (Opcional) Datos de remediación
+      - (Opcional) Fotos DESPUÉS
 
-    detalle: objeto con los campos del MIE
-    fotos:   lista de dicts {"tipo": "...", "fecha_hora": ..., "data": bytes}
+    'detalle' = objeto con todos los campos del MIE (incluye remediación si existe)
+    'fotos'   = lista de dicts con keys: tipo ("ANTES"/"DESPUES"), fecha_hora, data
     """
     buffer = BytesIO()
+    c = canvas.Canvas(buffer, pagesize=A4)
+    width, height = A4
 
-    doc = SimpleDocTemplate(
-        buffer,
-        pagesize=A4,
-        leftMargin=2 * cm,
-        rightMargin=2 * cm,
-        topMargin=2 * cm,
-        bottomMargin=2 * cm,
-    )
+    margen_x = 2.0 * cm
+    x_label = margen_x
+    x_value = margen_x + 5.0 * cm
+    y = height - 2.5 * cm
 
-    styles = getSampleStyleSheet()
-
-    # Estilos
-    title_style = ParagraphStyle(
-        "TituloMIE",
-        parent=styles["Title"],
-        fontSize=18,
-        leading=22,
-        spaceAfter=14,
-        alignment=0,  # izquierda
-    )
-
-    subtitle_style = ParagraphStyle(
-        "Subtitulo",
-        parent=styles["Normal"],
-        fontSize=9,
-        textColor=colors.grey,
-        spaceAfter=12,
-    )
-
-    header_style = ParagraphStyle(
-        "Header",
-        parent=styles["Heading2"],
-        fontSize=12,
-        spaceBefore=10,
-        spaceAfter=4,
-    )
-
-    text_style = styles["Normal"]
-
-    story = []
-
-    # -----------------------
-    #  Título principal
-    # -----------------------
-    codigo = getattr(detalle, "codigo_mie", None) or getattr(detalle, "drm", "")
+    codigo = getattr(detalle, "codigo_mie", "MIE")
     nombre_inst = (
         getattr(detalle, "nombre_instalacion", None)
         or getattr(detalle, "pozo", "")
         or ""
     ).strip()
 
+    # ------------------------------------------------------------------
+    # Título
+    # ------------------------------------------------------------------
+    c.setFont("Helvetica-Bold", 14)
     titulo = f"MIE {codigo}"
     if nombre_inst:
         titulo += f" - {nombre_inst}"
+    c.drawString(margen_x, y, titulo)
+    y -= 0.6 * cm
 
-    story.append(Paragraph(titulo, title_style))
-    story.append(
-        Paragraph(
-            f"Fecha de generación: {datetime.now().strftime('%Y-%m-%d %H:%M')}",
-            subtitle_style,
-        )
+    c.setFont("Helvetica", 9)
+    c.drawString(
+        margen_x,
+        y,
+        f"Fecha de generación: {datetime.utcnow().strftime('%Y-%m-%d %H:%M')} (UTC)",
     )
+    y -= 1.0 * cm
 
-    # Helper tabla 2 columnas
-    def tabla_campos(filas):
-        data = []
-        for label, value in filas:
-            if value is None:
-                value = ""
-            data.append([f"<b>{label}</b>", str(value)])
-
-        table = Table(data, colWidths=[6 * cm, 9 * cm])
-        table.setStyle(
-            TableStyle(
-                [
-                    ("VALIGN", (0, 0), (-1, -1), "TOP"),
-                    ("LEFTPADDING", (0, 0), (-1, -1), 0),
-                    ("RIGHTPADDING", (0, 0), (-1, -1), 4),
-                    ("TOPPADDING", (0, 0), (-1, -1), 1),
-                    ("BOTTOMPADDING", (0, 0), (-1, -1), 1),
-                ]
-            )
-        )
-        return table
-
-    # Helper para dibujar fotos en orden
-    def agregar_fotos(titulo_seccion, lista_fotos):
-        if not lista_fotos:
-            return
-        story.append(Paragraph(titulo_seccion, header_style))
-        story.append(Spacer(0, 6))
-
-        # Orden por fecha/hora para que se vea prolijo
-        fotos_sorted = sorted(
-            lista_fotos,
-            key=lambda f: str(f.get("fecha_hora", "")),
-        )
-
-        for idx, f in enumerate(fotos_sorted, start=1):
-            fecha_hora = f.get("fecha_hora", "")
-            data = f.get("data", b"")
-
-            story.append(
-                Paragraph(f"Foto {idx} - {fecha_hora}", text_style)
-            )
-            story.append(Spacer(0, 4))
-
-            try:
-                img = Image(BytesIO(data))
-                img._restrictSize(16 * cm, 18 * cm)
-                story.append(img)
-            except Exception:
-                story.append(
-                    Paragraph("[No se pudo mostrar la imagen]", text_style)
-                )
-
-            story.append(Spacer(0, 10))
-
-    # ======================================================
+    # ------------------------------------------------------------------
     # 1. Datos básicos del incidente
-    # ======================================================
-    story.append(Paragraph("1. Datos básicos del incidente", header_style))
-    story.append(
-        tabla_campos(
-            [
-                ("DRM / Nº incidente", codigo),
-                ("Usuario que carga", getattr(detalle, "creado_por", "")),
-                ("Fecha y hora del evento", getattr(detalle, "fecha_hora_evento", "")),
-                (
-                    "Fecha y hora de carga",
-                    getattr(detalle, "fecha_creacion_registro", ""),
-                ),
-            ]
-        )
-    )
-    story.append(Spacer(0, 6))
+    # ------------------------------------------------------------------
+    c.setFont("Helvetica-Bold", 11)
+    c.drawString(margen_x, y, "1. Datos básicos del incidente")
+    y -= 0.7 * cm
 
-    # ======================================================
+    _draw_label_value(c, "DRM / Nº incidente", codigo, x_label, x_value, y)
+    y -= 0.4 * cm
+    _draw_label_value(c, "Usuario que carga", detalle.creado_por, x_label, x_value, y)
+    y -= 0.4 * cm
+    _draw_label_value(c, "Fecha y hora del evento", detalle.fecha_hora_evento, x_label, x_value, y)
+    y -= 0.4 * cm
+    _draw_label_value(
+        c,
+        "Fecha y hora de carga",
+        getattr(detalle, "fecha_creacion_registro", ""),
+        x_label,
+        x_value,
+        y,
+    )
+    y -= 0.7 * cm
+
+    # ------------------------------------------------------------------
     # 2. Personas involucradas
-    # ======================================================
-    story.append(Paragraph("2. Personas involucradas", header_style))
-    story.append(
-        tabla_campos(
-            [
-                (
-                    "Observador",
-                    f"{getattr(detalle, 'observador_apellido', '')} "
-                    f"{getattr(detalle, 'observador_nombre', '')}".strip(),
-                ),
-                (
-                    "Responsable de la instalación",
-                    f"{getattr(detalle, 'responsable_inst_apellido', '')} "
-                    f"{getattr(detalle, 'responsable_inst_nombre', '')}".strip(),
-                ),
-            ]
-        )
-    )
-    story.append(Spacer(0, 6))
+    # ------------------------------------------------------------------
+    y = _ensure_space(c, y)
+    c.setFont("Helvetica-Bold", 11)
+    c.drawString(margen_x, y, "2. Personas involucradas")
+    y -= 0.6 * cm
 
-    # ======================================================
+    obs_ap = getattr(detalle, "observador_apellido", "") or ""
+    obs_no = getattr(detalle, "observador_nombre", "") or ""
+    resp_ap = getattr(detalle, "responsable_inst_apellido", "") or ""
+    resp_no = getattr(detalle, "responsable_inst_nombre", "") or ""
+
+    _draw_label_value(c, "Observador", f"{obs_ap} {obs_no}".strip(), x_label, x_value, y)
+    y -= 0.4 * cm
+    _draw_label_value(
+        c,
+        "Responsable de la instalación",
+        f"{resp_ap} {resp_no}".strip(),
+        x_label,
+        x_value,
+        y,
+    )
+    y -= 0.7 * cm
+
+    # ------------------------------------------------------------------
     # 3. Ubicación / instalación
-    # ======================================================
-    story.append(Paragraph("3. Ubicación / instalación", header_style))
-    story.append(
-        tabla_campos(
-            [
-                ("Yacimiento", getattr(detalle, "yacimiento", "")),
-                ("Zona", getattr(detalle, "zona", "")),
-                ("Nombre instalación / Pozo", nombre_inst),
-                ("Latitud", getattr(detalle, "latitud", "")),
-                ("Longitud", getattr(detalle, "longitud", "")),
-            ]
-        )
-    )
-    story.append(Spacer(0, 6))
+    # ------------------------------------------------------------------
+    y = _ensure_space(c, y)
+    c.setFont("Helvetica-Bold", 11)
+    c.drawString(margen_x, y, "3. Ubicación / instalación")
+    y -= 0.6 * cm
 
-    # ======================================================
+    _draw_label_value(c, "Yacimiento", getattr(detalle, "yacimiento", ""), x_label, x_value, y)
+    y -= 0.4 * cm
+    _draw_label_value(c, "Zona", getattr(detalle, "zona", ""), x_label, x_value, y)
+    y -= 0.4 * cm
+    _draw_label_value(
+        c,
+        "Nombre instalación / Pozo",
+        nombre_inst,
+        x_label,
+        x_value,
+        y,
+    )
+    y -= 0.4 * cm
+    _draw_label_value(c, "Latitud", getattr(detalle, "latitud", ""), x_label, x_value, y)
+    y -= 0.4 * cm
+    _draw_label_value(c, "Longitud", getattr(detalle, "longitud", ""), x_label, x_value, y)
+    y -= 0.7 * cm
+
+    # ------------------------------------------------------------------
     # 4. Características del evento
-    # ======================================================
-    story.append(Paragraph("4. Características del evento", header_style))
-    story.append(
-        tabla_campos(
-            [
-                ("Tipo de afectación", getattr(detalle, "tipo_afectacion", "")),
-                ("Tipo de derrame", getattr(detalle, "tipo_derrame", "")),
-                ("Tipo de instalación", getattr(detalle, "tipo_instalacion", "")),
-                ("Causa inmediata", getattr(detalle, "causa_inmediata", "")),
-            ]
-        )
-    )
-    story.append(Spacer(0, 6))
+    # ------------------------------------------------------------------
+    y = _ensure_space(c, y)
+    c.setFont("Helvetica-Bold", 11)
+    c.drawString(margen_x, y, "4. Características del evento")
+    y -= 0.6 * cm
 
-    # ======================================================
+    _draw_label_value(
+        c,
+        "Tipo de afectación",
+        getattr(detalle, "tipo_afectacion", ""),
+        x_label,
+        x_value,
+        y,
+    )
+    y -= 0.4 * cm
+    _draw_label_value(
+        c,
+        "Tipo de derrame",
+        getattr(detalle, "tipo_derrame", ""),
+        x_label,
+        x_value,
+        y,
+    )
+    y -= 0.4 * cm
+    _draw_label_value(
+        c,
+        "Tipo de instalación",
+        getattr(detalle, "tipo_instalacion", ""),
+        x_label,
+        x_value,
+        y,
+    )
+    y -= 0.4 * cm
+    _draw_label_value(
+        c,
+        "Causa inmediata",
+        getattr(detalle, "causa_inmediata", ""),
+        x_label,
+        x_value,
+        y,
+    )
+    y -= 0.7 * cm
+
+    # ------------------------------------------------------------------
     # 5. Volúmenes y área afectada
-    # ======================================================
-    story.append(Paragraph("5. Volúmenes y área afectada", header_style))
-    story.append(
-        tabla_campos(
-            [
-                ("Volumen bruto (m³)", getattr(detalle, "volumen_bruto_m3", "")),
-                ("Volumen de crudo (m³)", getattr(detalle, "volumen_crudo_m3", "")),
-                ("Volumen de gas (m³)", getattr(detalle, "volumen_gas_m3", "")),
-                ("PPM o % de agua", getattr(detalle, "ppm_agua", "")),
-                ("Área afectada (m²)", getattr(detalle, "area_afectada_m2", "")),
-            ]
-        )
-    )
-    story.append(Spacer(0, 6))
+    # ------------------------------------------------------------------
+    y = _ensure_space(c, y)
+    c.setFont("Helvetica-Bold", 11)
+    c.drawString(margen_x, y, "5. Volúmenes y área afectada")
+    y -= 0.6 * cm
 
-    # ======================================================
+    _draw_label_value(
+        c,
+        "Volumen bruto (m³)",
+        getattr(detalle, "volumen_bruto_m3", ""),
+        x_label,
+        x_value,
+        y,
+    )
+    y -= 0.4 * cm
+    _draw_label_value(
+        c,
+        "Volumen de crudo (m³)",
+        getattr(detalle, "volumen_crudo_m3", ""),
+        x_label,
+        x_value,
+        y,
+    )
+    y -= 0.4 * cm
+    _draw_label_value(
+        c,
+        "Volumen de gas (m³)",
+        getattr(detalle, "volumen_gas_m3", ""),
+        x_label,
+        x_value,
+        y,
+    )
+    y -= 0.4 * cm
+    _draw_label_value(
+        c,
+        "PPM o % de agua",
+        getattr(detalle, "ppm_agua", ""),
+        x_label,
+        x_value,
+        y,
+    )
+    y -= 0.4 * cm
+    _draw_label_value(
+        c,
+        "Área afectada (m²)",
+        getattr(detalle, "area_afectada_m2", ""),
+        x_label,
+        x_value,
+        y,
+    )
+    y -= 0.7 * cm
+
+    # ------------------------------------------------------------------
     # 6. Recursos afectados
-    # ======================================================
-    story.append(Paragraph("6. Recursos afectados", header_style))
-    recursos = getattr(detalle, "recursos_afectados", "") or "-"
-    story.append(Paragraph(recursos, text_style))
-    story.append(Spacer(0, 6))
+    # ------------------------------------------------------------------
+    y = _ensure_space(c, y)
+    c.setFont("Helvetica-Bold", 11)
+    c.drawString(margen_x, y, "6. Recursos afectados")
+    y -= 0.6 * cm
+    c.setFont("Helvetica", 9)
+    for line in _wrap_text(getattr(detalle, "recursos_afectados", ""), max_chars=90):
+        y = _ensure_space(c, y)
+        c.drawString(margen_x, y, line)
+        y -= 0.4 * cm
+    y -= 0.3 * cm
 
-    # ======================================================
+    # ------------------------------------------------------------------
     # 7. Otros datos / notas
-    # ======================================================
-    story.append(Paragraph("7. Otros datos / notas", header_style))
-    story.append(
-        tabla_campos(
-            [
-                ("Causa probable", getattr(detalle, "causa_probable", "")),
-                ("Responsable", getattr(detalle, "responsable", "")),
-            ]
-        )
+    # ------------------------------------------------------------------
+    y = _ensure_space(c, y)
+    c.setFont("Helvetica-Bold", 11)
+    c.drawString(margen_x, y, "7. Otros datos / notas")
+    y -= 0.6 * cm
+
+    _draw_label_value(
+        c,
+        "Causa probable",
+        getattr(detalle, "causa_probable", ""),
+        x_label,
+        x_value,
+        y,
     )
-    story.append(Spacer(0, 4))
+    y -= 0.4 * cm
+    _draw_label_value(
+        c,
+        "Responsable",
+        getattr(detalle, "responsable", ""),
+        x_label,
+        x_value,
+        y,
+    )
+    y -= 0.5 * cm
 
-    obs = getattr(detalle, "observaciones", "") or ""
-    med = getattr(detalle, "medidas_inmediatas", "") or ""
+    texto_obs = getattr(detalle, "observaciones", "") or ""
+    y = _draw_paragraph(c, "Observaciones / Comentarios", texto_obs, margen_x, y)
 
-    if obs:
-        story.append(Paragraph("<b>Observaciones / Comentarios</b>", text_style))
-        story.append(Paragraph(obs.replace("\n", "<br/>"), text_style))
-        story.append(Spacer(0, 4))
+    texto_medidas = getattr(detalle, "medidas_inmediatas", "") or ""
+    y = _draw_paragraph(c, "Medidas inmediatas", texto_medidas, margen_x, y)
 
-    if med:
-        story.append(Paragraph("<b>Medidas inmediatas</b>", text_style))
-        story.append(Paragraph(med.replace("\n", "<br/>"), text_style))
-        story.append(Spacer(0, 6))
-
-    # ======================================================
+    # ------------------------------------------------------------------
     # 8. Aprobación
-    # ======================================================
-    story.append(Paragraph("8. Aprobación", header_style))
-    aprobador_ini = (
-        f"{getattr(detalle, 'aprobador_apellido', '')} "
-        f"{getattr(detalle, 'aprobador_nombre', '')}"
-    ).strip()
-    story.append(
-        tabla_campos(
-            [
-                ("Aprobador", aprobador_ini),
-                (
-                    "Fecha y hora de aprobación",
-                    getattr(detalle, "fecha_hora_aprobacion", ""),
-                ),
-            ]
-        )
+    # ------------------------------------------------------------------
+    y = _ensure_space(c, y)
+    c.setFont("Helvetica-Bold", 11)
+    c.drawString(margen_x, y, "8. Aprobación")
+    y -= 0.6 * cm
+
+    ap_ap = getattr(detalle, "aprobador_apellido", "") or ""
+    ap_no = getattr(detalle, "aprobador_nombre", "") or ""
+    _draw_label_value(
+        c,
+        "Aprobador",
+        f"{ap_ap} {ap_no}".strip(),
+        x_label,
+        x_value,
+        y,
     )
-    story.append(Spacer(0, 8))
+    y -= 0.4 * cm
+    _draw_label_value(
+        c,
+        "Fecha y hora de aprobación",
+        getattr(detalle, "fecha_hora_aprobacion", ""),
+        x_label,
+        x_value,
+        y,
+    )
+    y -= 0.8 * cm
 
-    # ======================================================
+    # ------------------------------------------------------------------
     # 9. Fotos del incidente (ANTES)
-    # ======================================================
-    fotos = fotos or []
-    fotos_antes = [f for f in fotos if f.get("tipo", "").upper() == "ANTES"]
-    fotos_despues = [f for f in fotos if f.get("tipo", "").upper() == "DESPUES"]
-
+    # ------------------------------------------------------------------
+    fotos_antes = [f for f in fotos if f.get("tipo") == "ANTES"]
     if fotos_antes:
-        agregar_fotos("9. Fotos del incidente (ANTES)", fotos_antes)
+        y = _draw_images_block(
+            c,
+            "9. Fotos del incidente (ANTES)",
+            fotos_antes,
+            margen_x,
+            y,
+        )
 
-    # ======================================================
-    # 10. Remediación / Cierre (solo si hay datos)
-    # ======================================================
+    # ------------------------------------------------------------------
+    # 10. Remediación / Cierre (solo si realmente existe info)
+    # ------------------------------------------------------------------
+    # Datos de remediación (campos nuevos + fallback)
     rem_fecha = getattr(detalle, "rem_fecha_fin_saneamiento", None) or getattr(
         detalle, "rem_fecha", None
     )
     rem_vol_tierra = getattr(detalle, "rem_volumen_tierra_levantada", None)
-    rem_destino_tierra = getattr(detalle, "rem_destino_tierra_impactada", None)
+    rem_destino = getattr(detalle, "rem_destino_tierra_impactada", None)
     rem_vol_liq = getattr(detalle, "rem_volumen_liquido_recuperado", None)
     rem_coment = getattr(detalle, "rem_comentarios", None) or getattr(
         detalle, "rem_detalle", None
     )
-    rem_aprobador = (
-        f"{getattr(detalle, 'rem_aprobador_apellido', '')} "
-        f"{getattr(detalle, 'rem_aprobador_nombre', '')}"
-    ).strip()
+    rem_ap_ap = getattr(detalle, "rem_aprobador_apellido", None)
+    rem_ap_no = getattr(detalle, "rem_aprobador_nombre", None)
 
-    # Detectar si REALMENTE hay remediación cargada
-    has_rem_data = any(
-        v not in (None, "", 0)
-        for v in [
+    # ¿Hay remediación cargada o fotos DESPUES?
+    fotos_despues = [f for f in fotos if f.get("tipo") == "DESPUES"]
+    hay_remediacion_datos = any(
+        [
             rem_fecha,
-            rem_vol_tierra,
-            rem_destino_tierra,
-            rem_vol_liq,
+            rem_vol_tierra not in (None, 0),
+            rem_destino,
+            rem_vol_liq not in (None, 0),
             rem_coment,
-            rem_aprobador,
+            rem_ap_ap,
+            rem_ap_no,
         ]
     )
+    estado = getattr(detalle, "estado", "").upper()
 
-    if has_rem_data:
-        story.append(Spacer(0, 8))
-        story.append(Paragraph("10. Remediación / Cierre", header_style))
-        story.append(
-            tabla_campos(
-                [
-                    ("Fecha fin saneamiento", rem_fecha),
-                    ("Volumen de tierra levantada (m³)", rem_vol_tierra),
-                    ("Destino de la tierra impactada", rem_destino_tierra),
-                    ("Volumen de líquido recuperado (m³)", rem_vol_liq),
-                ]
-            )
+    if hay_remediacion_datos or fotos_despues or estado == "CERRADO":
+        # 10. Remediación / Cierre
+        y = _ensure_space(c, y)
+        c.setFont("Helvetica-Bold", 11)
+        c.drawString(margen_x, y, "10. Remediación / Cierre")
+        y -= 0.6 * cm
+
+        _draw_label_value(
+            c,
+            "Fecha fin saneamiento",
+            rem_fecha or "",
+            x_label,
+            x_value,
+            y,
         )
-        story.append(Spacer(0, 4))
+        y -= 0.4 * cm
+        _draw_label_value(
+            c,
+            "Volumen de tierra levantada (m³)",
+            rem_vol_tierra if rem_vol_tierra is not None else "",
+            x_label,
+            x_value,
+            y,
+        )
+        y -= 0.4 * cm
+        _draw_label_value(
+            c,
+            "Destino de la tierra impactada",
+            rem_destino or "",
+            x_label,
+            x_value,
+            y,
+        )
+        y -= 0.4 * cm
+        _draw_label_value(
+            c,
+            "Volumen de líquido recuperado (m³)",
+            rem_vol_liq if rem_vol_liq is not None else "",
+            x_label,
+            x_value,
+            y,
+        )
+        y -= 0.5 * cm
 
-        if rem_coment:
-            story.append(
-                Paragraph("<b>Comentarios de remediación</b>", text_style)
+        y = _draw_paragraph(
+            c,
+            "Comentarios de remediación",
+            rem_coment or "",
+            margen_x,
+            y,
+        )
+
+        aprobador_final = f"{(rem_ap_ap or '').strip()} {(rem_ap_no or '').strip()}".strip()
+        _draw_label_value(
+            c,
+            "Aprobador final",
+            aprobador_final,
+            x_label,
+            x_value,
+            y,
+        )
+        y -= 0.8 * cm
+
+        # 11. Fotos de la remediación (DESPUÉS)
+        if fotos_despues:
+            y = _draw_images_block(
+                c,
+                "11. Fotos de la remediación (DESPUÉS)",
+                fotos_despues,
+                margen_x,
+                y,
             )
-            story.append(
-                Paragraph((rem_coment or "").replace("\n", "<br/>"), text_style)
-            )
-            story.append(Spacer(0, 4))
 
-        if rem_aprobador:
-            story.append(
-                Paragraph(f"<b>Aprobador final:</b> {rem_aprobador}", text_style)
-            )
-        story.append(Spacer(0, 8))
-
-    # ======================================================
-    # 11. Fotos de la remediación (DESPUÉS)
-    # ======================================================
-    if fotos_despues:
-        agregar_fotos("11. Fotos de la remediación (DESPUÉS)", fotos_despues)
-
-    # Construimos el PDF
-    doc.build(story)
-    pdf_bytes = buffer.getvalue()
+    c.showPage()
+    c.save()
+    pdf = buffer.getvalue()
     buffer.close()
-    return pdf_bytes
+    return pdf
+
 
 
 
