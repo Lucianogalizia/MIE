@@ -748,48 +748,56 @@ elif modo == "Historial":
 #  MODO 3 - EXPORTAR IADE A EXCEL
 # =======================================================
 elif modo == "Exportar IADE":
-    st.header("Exportar base de IADE a Excel")
+    st.header("Exportar base completa de IADE")
 
-    st.markdown(
-        """
-        Esta opción exporta la tabla **mie_eventos** completa (sin fotos)
-        a un archivo Excel `.xlsx` para análisis o auditoría.
-        """
-    )
+    st.markdown("""
+    Esta opción exporta la tabla **mie_eventos** completa (sin fotos)
+    en un archivo Excel `.xlsx` para auditoría o análisis.
+    """)
 
     if st.button("Generar archivo Excel"):
         try:
+            from io import BytesIO
+            import pandas as pd
+            from datetime import datetime
+            from mie_backend import obtener_todos_mie
+
             registros = obtener_todos_mie()
-    
+
             if not registros:
-                st.info("No hay registros de IADE para exportar.")
+                st.info("No existen registros de IADE para exportar.")
             else:
+                # Convertimos filas a DataFrame
                 filas = [dict(r) for r in registros]
                 df = pd.DataFrame(filas)
-    
+
+                # 🔥🔥🔥 FIX: Excel no acepta timezone → convertimos todas las columnas datetime
+                for col in df.columns:
+                    if pd.api.types.is_datetime64_any_dtype(df[col]):
+                        df[col] = pd.to_datetime(df[col], utc=True).dt.tz_localize(None)
+
+                # Generar Excel
                 buffer = BytesIO()
-                # 👇 Cambiamos a openpyxl
+
                 with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
                     df.to_excel(writer, index=False, sheet_name="IADE")
-    
+
                 buffer.seek(0)
-    
+
                 nombre_archivo = (
                     f"IADE_mie_eventos_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx"
                 )
-    
+
                 st.download_button(
                     "📥 Descargar Excel",
                     data=buffer,
                     file_name=nombre_archivo,
-                    mime=(
-                        "application/vnd.openxmlformats-officedocument."
-                        "spreadsheetml.sheet"
-                    ),
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 )
-    
+
         except Exception as e:
             st.error(f"❌ Error al generar la exportación: {e}")
+
 
 
 
