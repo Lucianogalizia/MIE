@@ -759,29 +759,25 @@ elif modo == "Exportar IADE":
 
     if st.button("Generar archivo Excel"):
         try:
-            from io import BytesIO
-            import pandas as pd
-            from datetime import datetime
-            from mie_backend import obtener_todos_mie
-
             registros = obtener_todos_mie()
-
+    
             if not registros:
                 st.info("No hay registros de IADE para exportar.")
             else:
                 filas = [dict(r) for r in registros]
                 df = pd.DataFrame(filas)
-
+    
                 buffer = BytesIO()
-                with pd.ExcelWriter(buffer, engine="xlsxwriter") as writer:
+                # 👇 Cambiamos a openpyxl
+                with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
                     df.to_excel(writer, index=False, sheet_name="IADE")
-
+    
                 buffer.seek(0)
-
+    
                 nombre_archivo = (
                     f"IADE_mie_eventos_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx"
                 )
-
+    
                 st.download_button(
                     "📥 Descargar Excel",
                     data=buffer,
@@ -791,9 +787,10 @@ elif modo == "Exportar IADE":
                         "spreadsheetml.sheet"
                     ),
                 )
-
+    
         except Exception as e:
             st.error(f"❌ Error al generar la exportación: {e}")
+
 
 
 
