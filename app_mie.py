@@ -1,5 +1,5 @@
 import streamlit as st
-from datetime import datetime, date, time
+from datetime import datetime, date
 
 from mie_backend import (
     insertar_mie,
@@ -14,19 +14,22 @@ from mie_backend import (
 
 from mie_pdf_email import generar_mie_pdf  # genera el PDF en memoria
 
-st.set_page_config(page_title="MIE - Gestión de Derrames", layout="wide")
+# =======================================================
+#   CONFIGURACIÓN GENERAL
+# =======================================================
+st.set_page_config(page_title="IADE - Incidentes Ambientales Declarados", layout="wide")
 
-st.title("🛢️ Gestión de MIE (Derrames / DRM)")
+st.title("🌱 Gestión de IADE (Incidentes Ambientales Declarados)")
 
-modo = st.sidebar.radio("Modo", ["Nuevo MIE", "Historial"])
+modo = st.sidebar.radio("Modo", ["Nuevo IADE", "Historial"])
 
 
 # =======================================================
-#  MODO 1 - NUEVO MIE
+#  MODO 1 - NUEVO IADE
 # =======================================================
-if modo == "Nuevo MIE":
+if modo == "Nuevo IADE":
 
-    st.header("Registrar un nuevo MIE")
+    st.header("Registrar un nuevo IADE")
 
     # -----------------------
     # Datos básicos del incidente
@@ -44,38 +47,32 @@ if modo == "Nuevo MIE":
 
     fecha_hora_evento = datetime.combine(fecha_evento, hora_evento)
 
-    # El número de incidente se genera automáticamente al guardar
+    # Número IADE autogenerado
     st.text_input(
-        "Número de incidente / DRM",
+        "Número de incidente / IADE",
         value="Se genera automáticamente al guardar",
         disabled=True,
     )
-    drm = None  # no lo carga el usuario
+    drm = None
 
-    creado_por = st.text_input("Usuario que carga el MIE")
+    creado_por = st.text_input("Usuario que carga el IADE")
 
     # -----------------------
     # Personas involucradas
     # -----------------------
     st.markdown("### Personas involucradas")
 
-    # Fila 1: Observador (Apellido / Nombre)
     col_obs1, col_obs2 = st.columns(2)
     with col_obs1:
         observador_apellido = st.text_input("Observador - Apellido")
     with col_obs2:
         observador_nombre = st.text_input("Observador - Nombre")
 
-    # Fila 2: Responsable de la instalación (Apellido / Nombre)
     col_resp1, col_resp2 = st.columns(2)
     with col_resp1:
-        responsable_inst_apellido = st.text_input(
-            "Responsable de la instalación - Apellido"
-        )
+        responsable_inst_apellido = st.text_input("Responsable instalación - Apellido")
     with col_resp2:
-        responsable_inst_nombre = st.text_input(
-            "Responsable de la instalación - Nombre"
-        )
+        responsable_inst_nombre = st.text_input("Responsable instalación - Nombre")
 
     # -----------------------
     # Ubicación / instalación
@@ -149,21 +146,13 @@ if modo == "Nuevo MIE":
     st.markdown("### Volúmenes y área afectada")
     col_v1, col_v2, col_v3 = st.columns(3)
     with col_v1:
-        volumen_bruto_m3 = st.number_input(
-            "Volumen bruto (m³)", min_value=0.0, step=0.1
-        )
-        volumen_crudo_m3 = st.number_input(
-            "Volumen de crudo (m³)", min_value=0.0, step=0.1
-        )
+        volumen_bruto_m3 = st.number_input("Volumen bruto (m³)", min_value=0.0, step=0.1)
+        volumen_crudo_m3 = st.number_input("Volumen de crudo (m³)", min_value=0.0, step=0.1)
     with col_v2:
-        volumen_gas_m3 = st.number_input(
-            "Volumen de gas (m³)", min_value=0.0, step=1.0
-        )
+        volumen_gas_m3 = st.number_input("Volumen de gas (m³)", min_value=0.0, step=1.0)
         ppm_agua = st.text_input("PPM o % de agua")
     with col_v3:
-        area_afectada_m2 = st.number_input(
-            "Área afectada (m²)", min_value=0.0, step=1.0
-        )
+        area_afectada_m2 = st.number_input("Área afectada (m²)", min_value=0.0, step=1.0)
 
     # -----------------------
     # Recursos afectados
@@ -188,28 +177,25 @@ if modo == "Nuevo MIE":
     # Otros datos / notas
     # -----------------------
     st.markdown("### Otros datos / notas")
-    causa_probable = st.text_input("Causa probable (texto libre)")
-    responsable = st.text_input("Responsable (texto libre)")
-    observaciones = st.text_area("Notas / Observaciones adicionales")
+    causa_probable = st.text_input("Causa probable")
+    responsable = st.text_input("Responsable")
+    observaciones = st.text_area("Notas / observaciones")
     medidas_inmediatas = st.text_area("Medidas inmediatas adoptadas")
 
-    # Compatibilidad: fluido y volumen_estimado_m3 siguen existiendo
     fluido = st.text_input("Fluido", value="Petróleo + agua de formación")
-    volumen_estimado_m3 = volumen_bruto_m3  # usamos el bruto como estimado
+    volumen_estimado_m3 = volumen_bruto_m3
 
     # -----------------------
     # Aprobación (opcional)
     # -----------------------
     st.markdown("### Aprobación (opcional)")
 
-    # Fila 1: Aprobador (Apellido / Nombre)
     col_a1a, col_a1b = st.columns(2)
     with col_a1a:
         aprobador_apellido = st.text_input("Aprobador - Apellido")
     with col_a1b:
         aprobador_nombre = st.text_input("Aprobador - Nombre")
 
-    # Fila 2: Fecha / Hora aprobación
     col_a2a, col_a2b = st.columns(2)
     with col_a2a:
         fecha_aprob = st.date_input("Fecha aprobación", value=date.today())
@@ -219,16 +205,18 @@ if modo == "Nuevo MIE":
             value=datetime.now().time().replace(microsecond=0),
         )
 
-    fecha_hora_aprobacion = None
-    if aprobador_apellido or aprobador_nombre:
-        fecha_hora_aprobacion = datetime.combine(fecha_aprob, hora_aprob)
+    fecha_hora_aprobacion = (
+        datetime.combine(fecha_aprob, hora_aprob)
+        if (aprobador_apellido or aprobador_nombre)
+        else None
+    )
 
     # -----------------------
     # Fotos ANTES
     # -----------------------
-    st.subheader("📸 Fotos del derrame (ANTES)")
+    st.subheader("📸 Fotos del incidente (ANTES)")
     fotos = st.file_uploader(
-        "Subir una o más fotos",
+        "Subir fotos",
         type=["jpg", "jpeg", "png"],
         accept_multiple_files=True,
     )
@@ -236,23 +224,18 @@ if modo == "Nuevo MIE":
     # -----------------------
     # Botón GUARDAR
     # -----------------------
-    btn_guardar = st.button("Guardar MIE")
+    btn_guardar = st.button("Guardar IADE")
 
     if btn_guardar:
         if not nombre_instalacion or not creado_por:
-            st.error(
-                "❌ Nombre de la instalación y Usuario que carga son obligatorios."
-            )
+            st.error("❌ Nombre de la instalación y Usuario son obligatorios.")
         else:
-            # Compatibilidad con campos viejos:
-            pozo = nombre_instalacion
-            locacion = (f"{yacimiento or ''} - {zona or ''}").strip(" -") or None
-
             try:
+                # Inserción en DB
                 mie_id, codigo = insertar_mie(
                     drm=drm,
-                    pozo=pozo,
-                    locacion=locacion,
+                    pozo=nombre_instalacion,
+                    locacion=(f"{yacimiento or ''} - {zona or ''}").strip(" -"),
                     fluido=fluido,
                     volumen_estimado_m3=volumen_estimado_m3,
                     causa_probable=causa_probable,
@@ -279,56 +262,37 @@ if modo == "Nuevo MIE":
                     volumen_crudo_m3=volumen_crudo_m3,
                     area_afectada_m2=area_afectada_m2,
                     recursos_afectados=recursos_afectados,
-                    magnitud=None,
-                    aviso_sen=None,
-                    difusion_mediatica=None,
-                    aviso_autoridad=None,
-                    aviso_autoridad_fecha_hora=None,
-                    aviso_autoridad_emisor=None,
-                    aviso_autoridad_medio=None,
-                    aviso_autoridad_organismo=None,
-                    aviso_autoridad_contacto=None,
-                    aviso_superficiario=None,
-                    aviso_superficiario_fecha_hora=None,
-                    aviso_superficiario_emisor=None,
-                    aviso_superficiario_medio=None,
-                    aviso_superficiario_organismo=None,
-                    aviso_superficiario_contacto=None,
                     medidas_inmediatas=medidas_inmediatas or None,
                     aprobador_apellido=aprobador_apellido or None,
                     aprobador_nombre=aprobador_nombre or None,
                     fecha_hora_aprobacion=fecha_hora_aprobacion,
                 )
 
-                st.success(f"✅ MIE guardado. CÓDIGO: {codigo} (ID={mie_id})")
+                st.success(f"✅ IADE guardado. CÓDIGO: {codigo}")
 
+                # Fotos ANTES
                 if fotos:
                     for archivo in fotos:
                         nombre_destino = (
                             f"{codigo}/ANTES/"
                             f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{archivo.name}"
                         )
-                        blob_name = subir_foto_a_bucket(
-                            archivo, nombre_destino
-                        )
+                        blob_name = subir_foto_a_bucket(archivo, nombre_destino)
                         insertar_foto(mie_id, "ANTES", blob_name)
 
-                    st.info(f"📁 Se guardaron {len(fotos)} fotos en la nube.")
-
-                # Guardamos el último MIE en sesión (para PDF)
                 st.session_state["ultimo_mie_id"] = mie_id
                 st.session_state["ultimo_codigo_mie"] = codigo
 
             except Exception as e:
-                st.error(f"⚠️ Error guardando MIE: {e}")
+                st.error(f"⚠️ Error guardando IADE: {e}")
 
     # ==================================================
-    #  Generar PDF del último MIE guardado
+    #  PDF del último IADE
     # ==================================================
-    st.markdown("### 📄 Generar PDF del último MIE guardado")
+    st.markdown("### 📄 Generar PDF del último IADE")
 
     if "ultimo_mie_id" not in st.session_state:
-        st.info("👉 Primero guardá un MIE para poder generar el PDF.")
+        st.info("Guardá un IADE para generar el PDF.")
     else:
         mie_id_envio = st.session_state["ultimo_mie_id"]
 
@@ -337,22 +301,13 @@ if modo == "Nuevo MIE":
             fotos_envio = obtener_fotos_mie(mie_id_envio)
             pdf_bytes = generar_mie_pdf(detalle_envio, fotos_envio)
         except Exception as e:
-            st.error(f"⚠️ Error generando el PDF: {e}")
+            st.error(f"⚠️ Error generando PDF: {e}")
         else:
-            codigo_envio = getattr(detalle_envio, "codigo_mie", f"MIE_{mie_id_envio}")
-
-            nombre_inst = (
-                (getattr(detalle_envio, "nombre_instalacion", None) or detalle_envio.pozo or "")
-                .strip()
-            )
-
-            if nombre_inst:
-                file_name = f"{codigo_envio} - {nombre_inst}.pdf"
-            else:
-                file_name = f"{codigo_envio}.pdf"
+            nombre_inst = getattr(detalle_envio, "nombre_instalacion", "") or detalle_envio.pozo
+            file_name = f"{detalle_envio.codigo_mie} - {nombre_inst}.pdf"
 
             st.download_button(
-                "📄 Descargar PDF del MIE",
+                "📄 Descargar PDF IADE",
                 data=pdf_bytes,
                 file_name=file_name,
                 mime="application/pdf",
@@ -360,37 +315,30 @@ if modo == "Nuevo MIE":
 
 
 # =======================================================
-#  MODO 2 - HISTORIAL
+#  MODO 2 - HISTORIAL IADE
 # =======================================================
 else:
-    st.header("Historial de MIE")
+    st.header("Historial de IADE")
 
     registros = listar_mie()
 
     if not registros:
-        st.info("No hay MIE registrados todavía.")
+        st.info("No hay IADE registrados.")
     else:
-        # Combo de selección usando nombre de la instalación
+
         opciones = {}
         for r in registros:
-            nombre = (
-                getattr(r, "nombre_instalacion", None)
-                or r.pozo
-                or "(sin instalación)"
-            )
+            nombre = getattr(r, "nombre_instalacion", None) or r.pozo or "(sin instalación)"
             label = f"{r.codigo_mie} - {nombre} ({r.estado})"
             opciones[label] = r.mie_id
 
-        seleccion = st.selectbox("Seleccionar MIE", list(opciones.keys()))
+        seleccion = st.selectbox("Seleccionar IADE", list(opciones.keys()))
         mie_id = opciones[seleccion]
 
         detalle = obtener_mie_detalle(mie_id)
         fotos = obtener_fotos_mie(mie_id)
 
-        # ---------------------------------------------------
-        # DATOS DEL MIE (SOLO LECTURA, SOLO CAMPOS NUEVOS)
-        # ---------------------------------------------------
-        st.subheader("📄 Datos del MIE")
+        st.subheader("📄 Datos del IADE")
 
         # ----- Datos básicos -----
         st.markdown("### Datos básicos del incidente")
