@@ -4,5 +4,4 @@ google-cloud-storage
 pandas
 reportlab
 openpyxl
-matplotlib
 plotly
