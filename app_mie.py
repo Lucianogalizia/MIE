@@ -323,7 +323,7 @@ if modo == "Nuevo IADE":
 # =======================================================
 #  MODO 2 - HISTORIAL IADE
 # =======================================================
-else:
+elif modo == "Historial":
     st.header("Historial de IADE")
 
     registros = listar_mie()
@@ -759,16 +759,19 @@ elif modo == "Exportar IADE":
 
     if st.button("Generar archivo Excel"):
         try:
+            from io import BytesIO
+            import pandas as pd
+            from datetime import datetime
+            from mie_backend import obtener_todos_mie
+
             registros = obtener_todos_mie()
 
             if not registros:
                 st.info("No hay registros de IADE para exportar.")
             else:
-                # BigQuery Row -> dict -> DataFrame
                 filas = [dict(r) for r in registros]
                 df = pd.DataFrame(filas)
 
-                # Generar Excel en memoria
                 buffer = BytesIO()
                 with pd.ExcelWriter(buffer, engine="xlsxwriter") as writer:
                     df.to_excel(writer, index=False, sheet_name="IADE")
@@ -791,6 +794,7 @@ elif modo == "Exportar IADE":
 
         except Exception as e:
             st.error(f"❌ Error al generar la exportación: {e}")
+
 
 
 
