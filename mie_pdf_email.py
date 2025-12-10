@@ -1,5 +1,5 @@
 # ================================================================
-# mie_pdf_email.py — versión "nivel auditoría"
+# mie_pdf_email.py — versión "nivel auditoría" (MIA)
 # ================================================================
 
 from io import BytesIO
@@ -45,7 +45,7 @@ def _draw_header(c, ctx):
     margin = 2 * cm
 
     c.setFont("Helvetica-Bold", 11)
-    c.drawString(margin, height - 1.5 * cm, "IADE - Incidentes Ambientales Declarados")
+    c.drawString(margin, height - 1.5 * cm, "MIA - Incidentes Ambientales Declarados")
 
     c.setFont("Helvetica", 9)
     # Podés cambiar esto por el nombre de la empresa si querés
@@ -78,7 +78,7 @@ def _draw_footer(c, ctx):
     c.drawString(
         margin,
         1.6 * cm,
-        "Documento generado automáticamente desde el sistema IADE. Uso interno."
+        "Documento generado automáticamente desde el sistema MIA. Uso interno."
     )
 
     codigo = ctx.get("codigo", "")
@@ -86,7 +86,7 @@ def _draw_footer(c, ctx):
         c.drawRightString(
             width - margin,
             1.6 * cm,
-            f"Código IADE: {codigo}",
+            f"Código MIA: {codigo}",
         )
 
 
@@ -181,7 +181,7 @@ def _draw_images_block(c, ctx, titulo, fotos, x, y,
 
 
 # ================================================================
-# GENERADOR PDF IADE - Estilo auditoría
+# GENERADOR PDF MIA - Estilo auditoría
 # ================================================================
 def generar_mie_pdf(detalle, fotos):
     buffer = BytesIO()
@@ -193,7 +193,7 @@ def generar_mie_pdf(detalle, fotos):
     x_value = margin + 5.3 * cm
 
     # Contexto de paginado / metadatos
-    codigo = _safe(getattr(detalle, "codigo_mie", "IADE"))
+    codigo = _safe(getattr(detalle, "codigo_mie", "MIA"))
     ctx = {
         "page": 1,
         "codigo": codigo,
@@ -212,12 +212,12 @@ def generar_mie_pdf(detalle, fotos):
     # Título principal
     # ------------------------------------------------------------
     c.setFont("Helvetica-Bold", 14)
-    titulo = f"Informe de Incidente Ambiental Declarado (IADE)"
+    titulo = f"Informe de Incidente Ambiental Declarado (MIA)"
     c.drawString(margin, y, titulo)
     y -= 0.8 * cm
 
     c.setFont("Helvetica-Bold", 11)
-    subt = f"Código IADE: {codigo}"
+    subt = f"Código MIA: {codigo}"
     if nombre_inst:
         subt += f"  |  Instalación/Pozo: {nombre_inst}"
     c.drawString(margin, y, subt)
@@ -246,11 +246,11 @@ def generar_mie_pdf(detalle, fotos):
     usuario = _safe(getattr(detalle, "creado_por", ""))
 
     resumen_lines = [
-        f"- Estado actual del IADE: {estado or 'No informado'}",
+        f"- Estado actual del MIA: {estado or 'No informado'}",
         f"- DRM / referencia interna: {drm or '-'}",
         f"- Fecha y hora del incidente: {fecha_incidente or '-'}",
         f"- Fecha y hora de carga en sistema: {fecha_carga or '-'}",
-        f"- Usuario que registra el IADE: {usuario or '-'}",
+        f"- Usuario que registra el MIA: {usuario or '-'}",
     ]
 
     c.setFont("Helvetica", 9)
@@ -268,12 +268,12 @@ def generar_mie_pdf(detalle, fotos):
     c.drawString(margin, y, "1. Datos básicos del incidente")
     y -= 0.7 * cm
 
-    _draw_label_value(c, "Código IADE", codigo, x_label, x_value, y); y -= 0.42 * cm
+    _draw_label_value(c, "Código MIA", codigo, x_label, x_value, y); y -= 0.42 * cm
     _draw_label_value(c, "DRM / N° interno", drm, x_label, x_value, y); y -= 0.42 * cm
     _draw_label_value(c, "Usuario que carga", usuario, x_label, x_value, y); y -= 0.42 * cm
     _draw_label_value(c, "Fecha del incidente", fecha_incidente, x_label, x_value, y); y -= 0.42 * cm
     _draw_label_value(c, "Fecha de carga", fecha_carga, x_label, x_value, y); y -= 0.42 * cm
-    _draw_label_value(c, "Estado del IADE", estado, x_label, x_value, y); y -= 1.0 * cm
+    _draw_label_value(c, "Estado del MIA", estado, x_label, x_value, y); y -= 1.0 * cm
 
     # ------------------------------------------------------------
     # 2. Personas involucradas
@@ -449,6 +449,7 @@ def generar_mie_pdf(detalle, fotos):
     pdf = buffer.getvalue()
     buffer.close()
     return pdf
+
 
 
 
