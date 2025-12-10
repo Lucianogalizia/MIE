@@ -40,30 +40,54 @@ def _wrap_text(text, max_chars=90):
 # Helpers de página (encabezado / pie) para estilo auditoría
 # --------------------------------------------------------------
 def _draw_header(c, ctx):
-    """Encabezado estándar en todas las páginas. Devuelve y inicial."""
+    """Encabezado estándar con LOGO en todas las páginas."""
     width, height = A4
     margin = 2 * cm
 
+    # === TÍTULO ===
     c.setFont("Helvetica-Bold", 11)
     c.drawString(margin, height - 1.5 * cm, "MIA - Incidentes Ambientales Declarados")
 
+    # === Operador ===
     c.setFont("Helvetica", 9)
-    # Podés cambiar esto por el nombre de la empresa si querés
     c.drawString(margin, height - 2.0 * cm, "Operador: CLEAR PETROLEUM")
 
-    # Número de página (simple)
+    # === LOGO ===
+    try:
+        logo_path = "assets/logo_mia.png"   # Ruta al logo
+        logo = ImageReader(logo_path)
+
+        logo_w = 3.3 * cm   # tamaño del logo
+        logo_h = 1.8 * cm
+
+        c.drawImage(
+            logo,
+            width - margin - logo_w,
+            height - 2.0 * cm,
+            width=logo_w,
+            height=logo_h,
+            preserveAspectRatio=True,
+            mask='auto'
+        )
+
+    except Exception as e:
+        # Si el logo falla, no rompo el PDF
+        print("No se pudo cargar logo:", e)
+
+    # === NÚMERO DE PÁGINA ===
+    c.setFont("Helvetica", 9)
     c.drawRightString(
         width - margin,
-        height - 1.5 * cm,
-        f"Página {ctx['page']}",
+        height - 1.3 * cm,
+        f"Página {ctx['page']}"
     )
 
-    # Línea separadora
+    # === LÍNEA DIVISORIA ===
     c.setLineWidth(0.5)
-    c.line(margin, height - 2.2 * cm, width - margin, height - 2.2 * cm)
+    c.line(margin, height - 2.3 * cm, width - margin, height - 2.3 * cm)
 
-    # y inicial para el contenido de la página
-    return height - 2.7 * cm
+    return height - 2.9 * cm
+
 
 
 def _draw_footer(c, ctx):
