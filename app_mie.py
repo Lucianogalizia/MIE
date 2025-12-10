@@ -121,7 +121,7 @@ if "auth_ok" not in st.session_state:
     st.session_state["auth_ok"] = False
 
 if not st.session_state["auth_ok"]:
-    st.title("Ingreso a Módulo IADE / MIE")
+    st.title("Ingreso a Módulo MIA / MIE")
 
     pwd = st.text_input("Contraseña", type="password")
 
@@ -150,29 +150,27 @@ from mie_backend import (
     obtener_todos_mie,      # 👈 NUEVO
 )
 
-
-
 from mie_pdf_email import generar_mie_pdf  # genera el PDF en memoria
 
 # =======================================================
 #   CONFIGURACIÓN GENERAL
 # =======================================================
-st.set_page_config(page_title="IADE - Incidentes Ambientales Declarados", layout="wide")
+st.set_page_config(page_title="MIA - Incidentes Ambientales Declarados", layout="wide")
 
-st.title("🌱 Gestión de IADE (Incidentes Ambientales Declarados)")
+st.title("🌱 Gestión de MIA (Incidentes Ambientales Declarados)")
 
 modo = st.sidebar.radio(
     "Modo",
-    ["Nuevo IADE", "Historial", "Estadísticas", "Exportar IADE"]
+    ["Nuevo MIA", "Historial", "Estadísticas", "Exportar MIA"]
 )
 
 
 # =======================================================
-#  MODO 1 - NUEVO IADE
+#  MODO 1 - NUEVO MIA
 # =======================================================
-if modo == "Nuevo IADE":
+if modo == "Nuevo MIA":
 
-    st.header("Registrar un nuevo IADE")
+    st.header("Registrar un nuevo MIA")
 
     # -----------------------
     # Datos básicos del incidente
@@ -190,15 +188,15 @@ if modo == "Nuevo IADE":
 
     fecha_hora_evento = datetime.combine(fecha_evento, hora_evento)
 
-    # Número IADE autogenerado
+    # Número MIA autogenerado
     st.text_input(
-        "Número de incidente / IADE",
+        "Número de incidente / MIA",
         value="Se genera automáticamente al guardar",
         disabled=True,
     )
     drm = None
 
-    creado_por = st.text_input("Usuario que carga el IADE")
+    creado_por = st.text_input("Usuario que carga el MIA")
 
     # -----------------------
     # Personas involucradas
@@ -367,7 +365,7 @@ if modo == "Nuevo IADE":
     # -----------------------
     # Botón GUARDAR
     # -----------------------
-    btn_guardar = st.button("Guardar IADE")
+    btn_guardar = st.button("Guardar MIA")
 
     if btn_guardar:
         if not nombre_instalacion or not creado_por:
@@ -411,7 +409,7 @@ if modo == "Nuevo IADE":
                     fecha_hora_aprobacion=fecha_hora_aprobacion,
                 )
 
-                st.success(f"✅ IADE guardado. CÓDIGO: {codigo}")
+                st.success(f"✅ MIA guardado. CÓDIGO: {codigo}")
 
                 # Fotos ANTES
                 if fotos:
@@ -427,15 +425,15 @@ if modo == "Nuevo IADE":
                 st.session_state["ultimo_codigo_mie"] = codigo
 
             except Exception as e:
-                st.error(f"⚠️ Error guardando IADE: {e}")
+                st.error(f"⚠️ Error guardando MIA: {e}")
 
     # ==================================================
-    #  PDF del último IADE
+    #  PDF del último MIA
     # ==================================================
-    st.markdown("### 📄 Generar PDF del último IADE")
+    st.markdown("### 📄 Generar PDF del último MIA")
 
     if "ultimo_mie_id" not in st.session_state:
-        st.info("Guardá un IADE para generar el PDF.")
+        st.info("Guardá un MIA para generar el PDF.")
     else:
         mie_id_envio = st.session_state["ultimo_mie_id"]
 
@@ -450,22 +448,22 @@ if modo == "Nuevo IADE":
             file_name = f"{detalle_envio.codigo_mie} - {nombre_inst}.pdf"
 
             st.download_button(
-                "📄 Descargar PDF IADE",
+                "📄 Descargar PDF MIA",
                 data=pdf_bytes,
                 file_name=file_name,
                 mime="application/pdf",
             )
 
 # =======================================================
-#  MODO 2 - HISTORIAL IADE
+#  MODO 2 - HISTORIAL MIA
 # =======================================================
 elif modo == "Historial":
-    st.header("Historial de IADE")
+    st.header("Historial de MIA")
 
     registros = listar_mie()
 
     if not registros:
-        st.info("No hay IADE registrados.")
+        st.info("No hay MIA registrados.")
     else:
 
         opciones = {}
@@ -474,13 +472,13 @@ elif modo == "Historial":
             label = f"{r.codigo_mie} - {nombre} ({r.estado})"
             opciones[label] = r.mie_id
 
-        seleccion = st.selectbox("Seleccionar IADE", list(opciones.keys()))
+        seleccion = st.selectbox("Seleccionar MIA", list(opciones.keys()))
         mie_id = opciones[seleccion]
 
         detalle = obtener_mie_detalle(mie_id)
         fotos = obtener_fotos_mie(mie_id)
 
-        st.subheader("📄 Datos del IADE")
+        st.subheader("📄 Datos del MIA")
 
         # ----- Datos básicos -----
         st.markdown("### Datos básicos del incidente")
@@ -493,7 +491,7 @@ elif modo == "Historial":
             )
         with colb2:
             st.text_input(
-                "Usuario que carga el IADE",
+                "Usuario que carga el MIA",
                 detalle.creado_por or "",
                 disabled=True,
             )
@@ -743,12 +741,12 @@ elif modo == "Historial":
             st.write(comentarios or "-")
             st.write(f"**Aprobador final:** {aprob_ap} {aprob_no}")
 
-            st.success("Este IADE ya está CERRADO.")
+            st.success("Este MIA ya está CERRADO.")
 
             # ---------------------------------------------------
             # PDF FINAL DESDE HISTORIAL
             # ---------------------------------------------------
-            st.subheader("📄 Generar PDF de este IADE")
+            st.subheader("📄 Generar PDF de este MIA")
 
             try:
                 pdf_bytes_hist = generar_mie_pdf(detalle, fotos)
@@ -768,7 +766,7 @@ elif modo == "Historial":
                 )
 
                 st.download_button(
-                    "📄 Descargar PDF de este IADE",
+                    "📄 Descargar PDF de este MIA",
                     data=pdf_bytes_hist,
                     file_name=file_name_hist,
                     mime="application/pdf",
@@ -778,7 +776,7 @@ elif modo == "Historial":
         # FORMULARIO PARA CERRAR (si aún está abierto)
         # ---------------------------------------------------
         else:
-            st.subheader("🛠️ Cargar datos de remediación y CERRAR IADE")
+            st.subheader("🛠️ Cargar datos de remediación y CERRAR MIA")
 
             # Fecha fin saneamiento
             colr1, colr2 = st.columns(2)
@@ -847,7 +845,7 @@ elif modo == "Historial":
 
             # Botón cerrar
             if st.button(
-                "✔️ Guardar remediación y CERRAR IADE",
+                "✔️ Guardar remediación y CERRAR MIA",
                 key=f"btn_cerrar_{mie_id}",
             ):
                 try:
@@ -873,18 +871,18 @@ elif modo == "Historial":
                             blob_name = subir_foto_a_bucket(archivo, nombre_destino)
                             insertar_foto(mie_id, "DESPUES", blob_name)
 
-                    st.success("IADE cerrado exitosamente.")
+                    st.success("MIA cerrado exitosamente.")
                     st.rerun()
 
                 except Exception as e:
-                    st.error(f"❌ Error al cerrar IADE: {e}")
+                    st.error(f"❌ Error al cerrar MIA: {e}")
 
 # =======================================================
 #  MODO 2.5 - ESTADISTICAS
 # =======================================================
 
 elif modo == "Estadísticas":
-    st.header("Estadísticas de IADE")
+    st.header("Estadísticas de MIA")
 
     # ==========================
     # 1) Cargar datos completos
@@ -894,7 +892,7 @@ elif modo == "Estadísticas":
 
     registros = obtener_todos_mie()
     if not registros:
-        st.info("No hay IADE registrados para generar estadísticas.")
+        st.info("No hay MIA registrados para generar estadísticas.")
         st.stop()
 
     # Convertir a DataFrame
@@ -938,7 +936,7 @@ elif modo == "Estadísticas":
     with col_ff5:
         tipo_inst_sel = st.selectbox("Tipo de instalación", ["(Todos)"] + tipos_inst)
 
-    estado_sel = st.selectbox("Estado del IADE", ["(Todos)"] + estados)
+    estado_sel = st.selectbox("Estado del MIA", ["(Todos)"] + estados)
 
     # Aplicar filtros
     df_filt = df.copy()
@@ -961,16 +959,16 @@ elif modo == "Estadísticas":
         df_filt = df_filt[df_filt["estado"] == estado_sel]
 
     if df_filt.empty:
-        st.warning("No hay IADE que coincidan con los filtros seleccionados.")
+        st.warning("No hay MIA que coincidan con los filtros seleccionados.")
         st.stop()
 
     # ============================================================
     # 3) DASHBOARD EJECUTIVO (solo métricas clave)
     # ============================================================
-    st.subheader("📊 Dashboard Ejecutivo (IADE)")
+    st.subheader("📊 Dashboard Ejecutivo (MIA)")
 
     # MÉTRICAS BASE
-    total_iade = len(df_filt)
+    total_mia = len(df_filt)
     abiertos = len(df_filt[df_filt["estado"] == "ABIERTO"])
     cerrados = len(df_filt[df_filt["estado"] == "CERRADO"])
 
@@ -997,13 +995,13 @@ elif modo == "Estadísticas":
     n2 = df_mag.get("N2", 0)
     n3 = df_mag.get("N3", 0)
 
-    def pct(v): return f"{(v / total_iade * 100):.1f}%" if total_iade > 0 else "0%"
+    def pct(v): return f"{(v / total_mia * 100):.1f}%" if total_mia > 0 else "0%"
 
     # -------- Fila 1 --------
     col1, col2, col3 = st.columns(3)
-    col1.metric("IADE Totales", total_iade)
-    col2.metric("IADE Abiertos", abiertos)
-    col3.metric("IADE Cerrados", cerrados)
+    col1.metric("MIA Totales", total_mia)
+    col2.metric("MIA Abiertos", abiertos)
+    col3.metric("MIA Cerrados", cerrados)
 
     # -------- Fila 2 --------
     col4, col5, col6 = st.columns(3)
@@ -1034,7 +1032,7 @@ elif modo == "Estadísticas":
     # --------------------------
     # Evolución mensual
     # --------------------------
-    st.subheader("Evolución de IADE por mes")
+    st.subheader("Evolución de MIA por mes")
 
     if "fecha_hora_evento" in df_filt.columns:
         df_tmp = df_filt.copy()
@@ -1049,7 +1047,7 @@ elif modo == "Estadísticas":
             df_tmp
             .groupby("mes")
             .size()
-            .reset_index(name="total_iade")
+            .reset_index(name="total_mia")
             .sort_values("mes")
         )
 
@@ -1066,41 +1064,41 @@ elif modo == "Estadísticas":
                     df_cerr_tmp
                     .groupby("mes")
                     .size()
-                    .reset_index(name="cerrados_iade")
+                    .reset_index(name="cerrados_mia")
                 )
             else:
                 df_mes_cerr = df_mes_total[["mes"]].copy()
-                df_mes_cerr["cerrados_iade"] = 0
+                df_mes_cerr["cerrados_mia"] = 0
         else:
             df_mes_cerr = df_mes_total[["mes"]].copy()
-            df_mes_cerr["cerrados_iade"] = 0
+            df_mes_cerr["cerrados_mia"] = 0
 
         df_evo = df_mes_total.merge(df_mes_cerr, on="mes", how="left").fillna(0)
         df_evo["mes_str"] = df_evo["mes"].dt.strftime("%Y-%m")
 
         fig = go.Figure()
 
-        # Barras: IADE totales
+        # Barras: MIA totales
         fig.add_trace(go.Bar(
             x=df_evo["mes_str"],
-            y=df_evo["total_iade"],
-            name="IADE totales"
+            y=df_evo["total_mia"],
+            name="MIA totales"
         ))
 
-        # Línea: IADE cerrados
+        # Línea: MIA cerrados
         fig.add_trace(go.Scatter(
             x=df_evo["mes_str"],
-            y=df_evo["cerrados_iade"],
+            y=df_evo["cerrados_mia"],
             mode="lines+markers+text",
-            name="IADE cerrados",
-            text=df_evo["cerrados_iade"],
+            name="MIA cerrados",
+            text=df_evo["cerrados_mia"],
             textposition="top center"
         ))
 
         fig.update_layout(
-            title="IADE totales y cerrados por mes",
+            title="MIA totales y cerrados por mes",
             xaxis_title="Mes",
-            yaxis_title="Cantidad de IADE",
+            yaxis_title="Cantidad de MIA",
             template="plotly_white",
             hovermode="x unified",
             margin=dict(l=40, r=20, t=60, b=40)
@@ -1111,9 +1109,9 @@ elif modo == "Estadísticas":
         st.info("No se encontró la columna 'fecha_hora_evento' para graficar evolución mensual.")
 
     # --------------------------
-    # IADE por yacimiento
+    # MIA por yacimiento
     # --------------------------
-    st.subheader("Distribución de IADE por Yacimiento")
+    st.subheader("Distribución de MIA por Yacimiento")
 
     if "yacimiento" in df_filt.columns:
         df_yac = (
@@ -1130,8 +1128,8 @@ elif modo == "Estadísticas":
                 x="cantidad",
                 y="yacimiento",
                 orientation="h",
-                title="IADE por Yacimiento",
-                labels={"cantidad": "Cantidad de IADE", "yacimiento": "Yacimiento"},
+                title="MIA por Yacimiento",
+                labels={"cantidad": "Cantidad de MIA", "yacimiento": "Yacimiento"},
             )
             fig_yac.update_layout(template="plotly_white", margin=dict(l=40, r=20, t=60, b=40))
             st.plotly_chart(fig_yac, use_container_width=True)
@@ -1141,9 +1139,9 @@ elif modo == "Estadísticas":
         st.info("No se encontró la columna 'yacimiento'.")
 
     # --------------------------
-    # IADE por tipo de instalación
+    # MIA por tipo de instalación
     # --------------------------
-    st.subheader("Distribución de IADE por Tipo de Instalación")
+    st.subheader("Distribución de MIA por Tipo de Instalación")
 
     if "tipo_instalacion" in df_filt.columns:
         df_inst = (
@@ -1159,8 +1157,8 @@ elif modo == "Estadísticas":
                 df_inst,
                 x="tipo_instalacion",
                 y="cantidad",
-                title="IADE por Tipo de Instalación",
-                labels={"cantidad": "Cantidad de IADE", "tipo_instalacion": "Tipo de Instalación"},
+                title="MIA por Tipo de Instalación",
+                labels={"cantidad": "Cantidad de MIA", "tipo_instalacion": "Tipo de Instalación"},
             )
             fig_inst.update_layout(
                 template="plotly_white",
@@ -1174,9 +1172,9 @@ elif modo == "Estadísticas":
         st.info("No se encontró la columna 'tipo_instalacion'.")
 
     # --------------------------
-    # IADE por causa inmediata
+    # MIA por causa inmediata
     # --------------------------
-    st.subheader("Distribución de IADE por Causa Inmediata")
+    st.subheader("Distribución de MIA por Causa Inmediata")
 
     if "causa_inmediata" in df_filt.columns:
         df_causa = (
@@ -1192,8 +1190,8 @@ elif modo == "Estadísticas":
                 df_causa,
                 x="causa_inmediata",
                 y="cantidad",
-                title="IADE por Causa Inmediata",
-                labels={"cantidad": "Cantidad de IADE", "causa_inmediata": "Causa Inmediata"},
+                title="MIA por Causa Inmediata",
+                labels={"cantidad": "Cantidad de MIA", "causa_inmediata": "Causa Inmediata"},
             )
             fig_causa.update_layout(
                 template="plotly_white",
@@ -1207,9 +1205,9 @@ elif modo == "Estadísticas":
         st.info("No se encontró la columna 'causa_inmediata'.")
 
     # --------------------------
-    # IADE por tipo de afectación
+    # MIA por tipo de afectación
     # --------------------------
-    st.subheader("Distribución de IADE por Tipo de Afectación")
+    st.subheader("Distribución de MIA por Tipo de Afectación")
 
     if "tipo_afectacion" in df_filt.columns:
         df_afec = (
@@ -1225,8 +1223,8 @@ elif modo == "Estadísticas":
                 df_afec,
                 x="tipo_afectacion",
                 y="cantidad",
-                title="IADE por Tipo de Afectación",
-                labels={"cantidad": "Cantidad de IADE", "tipo_afectacion": "Tipo de Afectación"},
+                title="MIA por Tipo de Afectación",
+                labels={"cantidad": "Cantidad de MIA", "tipo_afectacion": "Tipo de Afectación"},
             )
             fig_afec.update_layout(
                 template="plotly_white",
@@ -1240,9 +1238,9 @@ elif modo == "Estadísticas":
         st.info("No se encontró la columna 'tipo_afectacion'.")
 
     # --------------------------
-    # IADE por tipo de derrame
+    # MIA por tipo de derrame
     # --------------------------
-    st.subheader("Distribución de IADE por Tipo de Derrame")
+    st.subheader("Distribución de MIA por Tipo de Derrame")
 
     if "tipo_derrame" in df_filt.columns:
         df_der = (
@@ -1258,8 +1256,8 @@ elif modo == "Estadísticas":
                 df_der,
                 x="tipo_derrame",
                 y="cantidad",
-                title="IADE por Tipo de Derrame",
-                labels={"cantidad": "Cantidad de IADE", "tipo_derrame": "Tipo de Derrame"},
+                title="MIA por Tipo de Derrame",
+                labels={"cantidad": "Cantidad de MIA", "tipo_derrame": "Tipo de Derrame"},
             )
             fig_der.update_layout(
                 template="plotly_white",
@@ -1273,14 +1271,11 @@ elif modo == "Estadísticas":
         st.info("No se encontró la columna 'tipo_derrame'.")
 
 
-            
-
-
 # =======================================================
-#  MODO 3 - EXPORTAR IADE A EXCEL
+#  MODO 3 - EXPORTAR MIA A EXCEL
 # =======================================================
-elif modo == "Exportar IADE":
-    st.header("Exportar base completa de IADE")
+elif modo == "Exportar MIA":
+    st.header("Exportar base completa de MIA")
 
     st.markdown("""
     Esta opción exporta la tabla **mie_eventos** completa (sin fotos)
@@ -1297,7 +1292,7 @@ elif modo == "Exportar IADE":
             registros = obtener_todos_mie()
 
             if not registros:
-                st.info("No existen registros de IADE para exportar.")
+                st.info("No existen registros de MIA para exportar.")
             else:
                 # Convertimos filas a DataFrame
                 filas = [dict(r) for r in registros]
@@ -1312,12 +1307,12 @@ elif modo == "Exportar IADE":
                 buffer = BytesIO()
 
                 with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
-                    df.to_excel(writer, index=False, sheet_name="IADE")
+                    df.to_excel(writer, index=False, sheet_name="MIA")
 
                 buffer.seek(0)
 
                 nombre_archivo = (
-                    f"IADE_mie_eventos_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx"
+                    f"MIA_mie_eventos_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx"
                 )
 
                 st.download_button(
@@ -1329,6 +1324,7 @@ elif modo == "Exportar IADE":
 
         except Exception as e:
             st.error(f"❌ Error al generar la exportación: {e}")
+
 
 
 
