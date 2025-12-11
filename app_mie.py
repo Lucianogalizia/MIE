@@ -285,15 +285,46 @@ if modo == "Nuevo MIA":
     # Volúmenes y área
     # -----------------------
     st.markdown("### Volúmenes y área afectada")
+
+    # Fila 1
     col_v1, col_v2, col_v3 = st.columns(3)
     with col_v1:
-        volumen_bruto_m3 = st.number_input("Volumen bruto (m³)", min_value=0.0, step=0.1)
-        volumen_crudo_m3 = st.number_input("Volumen de crudo (m³)", min_value=0.0, step=0.1)
+        volumen_bruto_m3 = st.number_input(
+            "Volumen bruto (m³)", min_value=0.0, step=0.1
+        )
     with col_v2:
-        volumen_gas_m3 = st.number_input("Volumen de gas (m³)", min_value=0.0, step=1.0)
-        ppm_agua = st.text_input("PPM o % de agua")
+        volumen_gas_m3 = st.number_input(
+            "Volumen de gas (m³)", min_value=0.0, step=1.0
+        )
     with col_v3:
-        area_afectada_m2 = st.number_input("Área afectada (m²)", min_value=0.0, step=1.0)
+        area_afectada_m2 = st.number_input(
+            "Área afectada (m²)", min_value=0.0, step=1.0
+        )
+    
+    # Fila 2
+    col_v4, col_v5 = st.columns(2)
+    
+    # % de agua
+    with col_v5:
+        ppm_agua = st.number_input(
+            "% de agua",
+            min_value=0.0,
+            max_value=100.0,
+            step=0.1,
+            value=0.0,
+        )
+    
+    # Cálculo del crudo
+    volumen_crudo_m3 = volumen_bruto_m3 * ((100.0 - ppm_agua) / 100.0)
+    
+    # Volumen de crudo NO editable
+    with col_v4:
+        st.number_input(
+            "Volumen de crudo (m³)",
+            value=float(volumen_crudo_m3),
+            disabled=True,
+        )
+
 
     # -----------------------
     # Recursos afectados
