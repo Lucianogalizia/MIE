@@ -219,19 +219,39 @@ if modo == "Nuevo MIA":
     # Ubicación / instalación
     # -----------------------
     st.markdown("### Ubicación / instalación")
+    
+    # ---- Fila 1: Yacimiento / Zona / Instalación ----
     col_u1, col_u2, col_u3 = st.columns(3)
+    
     with col_u1:
-        yacimiento = st.text_input("Yacimiento")
+        # 1) Yacimiento como pick list
+        yacimiento = st.selectbox(
+            "Yacimiento",
+            ["", "Las Heras CG", "Canadon Escondida"],
+            index=0,
+        )
+    
     with col_u2:
         zona = st.text_input("Zona")
+    
     with col_u3:
         nombre_instalacion = st.text_input("Nombre de la instalación")
-
+    
+    # ---- Fila 2: Lat / Lon con ejemplo griseado ----
     col_geo1, col_geo2 = st.columns(2)
+    
     with col_geo1:
-        latitud = st.text_input("Latitud")
+        latitud = st.text_input(
+            "Latitud",
+            placeholder="ej: -46,3832381000",
+        )
+    
     with col_geo2:
-        longitud = st.text_input("Longitud")
+        longitud = st.text_input(
+            "Longitud",
+            placeholder="ej: -68,4552825300",
+        )
+
 
     # -----------------------
     # Características del evento
