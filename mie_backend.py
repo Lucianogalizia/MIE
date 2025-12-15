@@ -189,7 +189,7 @@ def insertar_mie(
         ("causa_inm", "STRING", causa_inmediata),
         ("vol_bruto", "FLOAT64", volumen_bruto_m3),
         ("vol_gas", "FLOAT64", volumen_gas_m3),
-        ("ppm_agua", "STRING", ppm_agua),
+        ("ppm_agua", "STRING", str(ppm_agua) if ppm_agua is not None else None),
         ("vol_crudo", "FLOAT64", volumen_crudo_m3),
         ("area_af", "FLOAT64", area_afectada_m2),
         ("rec_af", "STRING", recursos_afectados),
@@ -346,6 +346,144 @@ def actualizar_mie_basico(
 
 
 # ---------------------------------------------------------
+# 9.5) Actualizar MIA completo (para el botón "Editar")
+# ---------------------------------------------------------
+def actualizar_mie_completo(
+    mie_id: int,
+    creado_por=None,
+    fecha_hora_evento=None,
+
+    observador_apellido=None,
+    observador_nombre=None,
+    responsable_inst_apellido=None,
+    responsable_inst_nombre=None,
+
+    yacimiento=None,
+    zona=None,
+    nombre_instalacion=None,
+    latitud=None,
+    longitud=None,
+
+    tipo_afectacion=None,
+    tipo_derrame=None,
+    tipo_instalacion=None,
+    causa_inmediata=None,
+
+    volumen_bruto_m3=None,
+    volumen_gas_m3=None,
+    ppm_agua=None,
+    volumen_crudo_m3=None,
+    area_afectada_m2=None,
+
+    recursos_afectados=None,
+    causa_probable=None,
+    responsable=None,
+    observaciones=None,
+    medidas_inmediatas=None,
+
+    aprobador_apellido=None,
+    aprobador_nombre=None,
+    fecha_hora_aprobacion=None,
+):
+    """
+    Actualiza campos editables del MIA sin tocar:
+    - mie_id / codigo_mie / drm
+    - estado / fecha_creacion_registro
+    - remediación
+    """
+    query = f"""
+        UPDATE `{PROJECT_ID}.{DATASET_ID}.mie_eventos`
+        SET
+            creado_por = @creado_por,
+            fecha_hora_evento = @fecha_hora_evento,
+
+            observador_apellido = @obs_apellido,
+            observador_nombre = @obs_nombre,
+            responsable_inst_apellido = @res_inst_ape,
+            responsable_inst_nombre = @res_inst_nom,
+
+            yacimiento = @yacimiento,
+            zona = @zona,
+            nombre_instalacion = @nombre_inst,
+            latitud = @latitud,
+            longitud = @longitud,
+
+            tipo_afectacion = @tipo_afectacion,
+            tipo_derrame = @tipo_derrame,
+            tipo_instalacion = @tipo_instalacion,
+            causa_inmediata = @causa_inmediata,
+
+            volumen_bruto_m3 = @vol_bruto,
+            volumen_gas_m3 = @vol_gas,
+            ppm_agua = @ppm_agua,
+            volumen_crudo_m3 = @vol_crudo,
+            area_afectada_m2 = @area_afectada_m2,
+
+            recursos_afectados = @recursos_afectados,
+            causa_probable = @causa_probable,
+            responsable = @responsable,
+            observaciones = @observaciones,
+            medidas_inmediatas = @medidas_inmediatas,
+
+            aprobador_apellido = @aprob_apellido,
+            aprobador_nombre = @aprob_nombre,
+            fecha_hora_aprobacion = @fh_aprob
+
+        WHERE mie_id = @id
+    """
+
+    cfg = bigquery.QueryJobConfig(
+        query_parameters=[
+            bigquery.ScalarQueryParameter("creado_por", "STRING", creado_por),
+            bigquery.ScalarQueryParameter(
+                "fecha_hora_evento", "TIMESTAMP",
+                fecha_hora_evento.isoformat() if fecha_hora_evento else None
+            ),
+
+            bigquery.ScalarQueryParameter("obs_apellido", "STRING", observador_apellido),
+            bigquery.ScalarQueryParameter("obs_nombre", "STRING", observador_nombre),
+            bigquery.ScalarQueryParameter("res_inst_ape", "STRING", responsable_inst_apellido),
+            bigquery.ScalarQueryParameter("res_inst_nom", "STRING", responsable_inst_nombre),
+
+            bigquery.ScalarQueryParameter("yacimiento", "STRING", yacimiento),
+            bigquery.ScalarQueryParameter("zona", "STRING", zona),
+            bigquery.ScalarQueryParameter("nombre_inst", "STRING", nombre_instalacion),
+            bigquery.ScalarQueryParameter("latitud", "STRING", latitud),
+            bigquery.ScalarQueryParameter("longitud", "STRING", longitud),
+
+            bigquery.ScalarQueryParameter("tipo_afectacion", "STRING", tipo_afectacion),
+            bigquery.ScalarQueryParameter("tipo_derrame", "STRING", tipo_derrame),
+            bigquery.ScalarQueryParameter("tipo_instalacion", "STRING", tipo_instalacion),
+            bigquery.ScalarQueryParameter("causa_inmediata", "STRING", causa_inmediata),
+
+            bigquery.ScalarQueryParameter("vol_bruto", "FLOAT64", float(volumen_bruto_m3) if volumen_bruto_m3 is not None else None),
+            bigquery.ScalarQueryParameter("vol_gas", "FLOAT64", float(volumen_gas_m3) if volumen_gas_m3 is not None else None),
+            # Tu esquema actual guarda ppm_agua como STRING:
+            bigquery.ScalarQueryParameter("ppm_agua", "STRING", str(ppm_agua) if ppm_agua is not None else None),
+            bigquery.ScalarQueryParameter("vol_crudo", "FLOAT64", float(volumen_crudo_m3) if volumen_crudo_m3 is not None else None),
+            bigquery.ScalarQueryParameter("area_afectada_m2", "FLOAT64", float(area_afectada_m2) if area_afectada_m2 is not None else None),
+
+            bigquery.ScalarQueryParameter("recursos_afectados", "STRING", recursos_afectados),
+            bigquery.ScalarQueryParameter("causa_probable", "STRING", causa_probable),
+            bigquery.ScalarQueryParameter("responsable", "STRING", responsable),
+            bigquery.ScalarQueryParameter("observaciones", "STRING", observaciones),
+            bigquery.ScalarQueryParameter("medidas_inmediatas", "STRING", medidas_inmediatas),
+
+            bigquery.ScalarQueryParameter("aprob_apellido", "STRING", aprobador_apellido),
+            bigquery.ScalarQueryParameter("aprob_nombre", "STRING", aprobador_nombre),
+            bigquery.ScalarQueryParameter(
+                "fh_aprob", "TIMESTAMP",
+                fecha_hora_aprobacion.isoformat() if fecha_hora_aprobacion else None
+            ),
+
+            bigquery.ScalarQueryParameter("id", "INT64", mie_id),
+        ]
+    )
+
+    bq_client.query(query, cfg).result()
+
+
+# ---------------------------------------------------------
 # 10) Cerrar IADE con remediación
 # ---------------------------------------------------------
 def cerrar_mie_con_remediacion(
@@ -398,7 +536,7 @@ def cerrar_mie_con_remediacion(
 
     bq_client.query(query, cfg).result()
 
-    
+
 # ---------------------------------------------------------
 # 11) Obtener todos los IADE (para exportar a Excel)
 # ---------------------------------------------------------
@@ -409,6 +547,7 @@ def obtener_todos_mie():
         ORDER BY fecha_creacion_registro
     """
     return list(bq_client.query(query).result())
+
 
 
 
