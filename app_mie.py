@@ -1,8 +1,38 @@
 import streamlit as st
-from datetime import datetime, date
+from datetime import datetime, date, time
 from io import BytesIO
 import pandas as pd
 import plotly.graph_objects as go
+
+# =======================================================
+#   CONFIGURACIÓN GENERAL (DEBE IR ANTES DE CUALQUIER st.*)
+# =======================================================
+st.set_page_config(page_title="MIA - Incidentes Ambientales Declarados", layout="wide")
+
+# ==========================
+#  HELPERS - PICK LIST HORAS
+# ==========================
+def _time_options(step_minutes=5):
+    opts = []
+    for h in range(24):
+        for m in range(0, 60, step_minutes):
+            opts.append(time(h, m))
+    return opts
+
+def _nearest_index(opts, t):
+    best_i = 0
+    best_diff = 10**9
+    t_min = t.hour * 60 + t.minute
+    for i, x in enumerate(opts):
+        x_min = x.hour * 60 + x.minute
+        diff = abs(x_min - t_min)
+        if diff < best_diff:
+            best_diff = diff
+            best_i = i
+    return best_i
+
+# Lista global de horarios (cada 5 min)
+HORAS_OPTS = _time_options(step_minutes=5)
 
 # ==========================
 # CSS CORPORATIVO
@@ -131,7 +161,7 @@ if not st.session_state["auth_ok"]:
             if pwd == APP_PASSWORD:
                 st.session_state["auth_ok"] = True
                 st.success("Acceso concedido.")
-                st.rerun()   # 👈 antes decía st.experimental_rerun()
+                st.rerun()
             else:
                 st.error("Contraseña incorrecta.")
 
@@ -147,15 +177,10 @@ from mie_backend import (
     obtener_fotos_mie,
     actualizar_mie_basico,
     cerrar_mie_con_remediacion,
-    obtener_todos_mie,      # 👈 NUEVO
+    obtener_todos_mie,
 )
 
 from mie_pdf_email import generar_mie_pdf  # genera el PDF en memoria
-
-# =======================================================
-#   CONFIGURACIÓN GENERAL
-# =======================================================
-st.set_page_config(page_title="MIA - Incidentes Ambientales Declarados", layout="wide")
 
 st.title("🌱 Gestión de MIA (Incidentes Ambientales Declarados)")
 
@@ -163,7 +188,6 @@ modo = st.sidebar.radio(
     "Modo",
     ["Nuevo MIA", "Historial", "Estadísticas", "Exportar MIA"]
 )
-
 
 # =======================================================
 #  MODO 1 - NUEVO MIA
@@ -181,9 +205,13 @@ if modo == "Nuevo MIA":
     with col_f1:
         fecha_evento = st.date_input("Fecha del evento", value=date.today())
     with col_f2:
-        hora_evento = st.time_input(
+        ahora = datetime.now().time().replace(microsecond=0)
+        hora_evento = st.selectbox(
             "Hora del evento",
-            value=datetime.now().time().replace(microsecond=0),
+            options=HORAS_OPTS,
+            format_func=lambda t: t.strftime("%H:%M"),
+            index=_nearest_index(HORAS_OPTS, ahora),
+            key="hora_evento",
         )
 
     fecha_hora_evento = datetime.combine(fecha_evento, hora_evento)
@@ -219,39 +247,35 @@ if modo == "Nuevo MIA":
     # Ubicación / instalación
     # -----------------------
     st.markdown("### Ubicación / instalación")
-    
-    # ---- Fila 1: Yacimiento / Zona / Instalación ----
+
     col_u1, col_u2, col_u3 = st.columns(3)
-    
+
     with col_u1:
-        # 1) Yacimiento como pick list
         yacimiento = st.selectbox(
             "Yacimiento",
             ["", "Las Heras CG", "Canadon Escondida"],
             index=0,
         )
-    
+
     with col_u2:
         zona = st.text_input("Zona")
-    
+
     with col_u3:
         nombre_instalacion = st.text_input("Nombre de la instalación")
-    
-    # ---- Fila 2: Lat / Lon con ejemplo griseado ----
+
     col_geo1, col_geo2 = st.columns(2)
-    
+
     with col_geo1:
         latitud = st.text_input(
             "Latitud",
             placeholder="ej: -46,3832381000",
         )
-    
+
     with col_geo2:
         longitud = st.text_input(
             "Longitud",
             placeholder="ej: -68,4552825300",
         )
-
 
     # -----------------------
     # Características del evento
@@ -306,25 +330,16 @@ if modo == "Nuevo MIA":
     # -----------------------
     st.markdown("### Volúmenes y área afectada")
 
-    # Fila 1
     col_v1, col_v2, col_v3 = st.columns(3)
     with col_v1:
-        volumen_bruto_m3 = st.number_input(
-            "Volumen bruto (m³)", min_value=0.0, step=0.1
-        )
+        volumen_bruto_m3 = st.number_input("Volumen bruto (m³)", min_value=0.0, step=0.1)
     with col_v2:
-        volumen_gas_m3 = st.number_input(
-            "Volumen de gas (m³)", min_value=0.0, step=1.0
-        )
+        volumen_gas_m3 = st.number_input("Volumen de gas (m³)", min_value=0.0, step=1.0)
     with col_v3:
-        area_afectada_m2 = st.number_input(
-            "Área afectada (m²)", min_value=0.0, step=1.0
-        )
-    
-    # Fila 2
+        area_afectada_m2 = st.number_input("Área afectada (m²)", min_value=0.0, step=1.0)
+
     col_v4, col_v5 = st.columns(2)
-    
-    # % de agua
+
     with col_v5:
         ppm_agua = st.number_input(
             "% de agua",
@@ -333,18 +348,15 @@ if modo == "Nuevo MIA":
             step=0.1,
             value=0.0,
         )
-    
-    # Cálculo del crudo
+
     volumen_crudo_m3 = volumen_bruto_m3 * ((100.0 - ppm_agua) / 100.0)
-    
-    # Volumen de crudo NO editable
+
     with col_v4:
         st.number_input(
             "Volumen de crudo (m³)",
             value=float(volumen_crudo_m3),
             disabled=True,
         )
-
 
     # -----------------------
     # Recursos afectados
@@ -392,9 +404,13 @@ if modo == "Nuevo MIA":
     with col_a2a:
         fecha_aprob = st.date_input("Fecha aprobación", value=date.today())
     with col_a2b:
-        hora_aprob = st.time_input(
+        ahora = datetime.now().time().replace(microsecond=0)
+        hora_aprob = st.selectbox(
             "Hora aprobación",
-            value=datetime.now().time().replace(microsecond=0),
+            options=HORAS_OPTS,
+            format_func=lambda t: t.strftime("%H:%M"),
+            index=_nearest_index(HORAS_OPTS, ahora),
+            key="hora_aprob",
         )
 
     fecha_hora_aprobacion = (
@@ -423,7 +439,6 @@ if modo == "Nuevo MIA":
             st.error("❌ Nombre de la instalación y Usuario son obligatorios.")
         else:
             try:
-                # Inserción en DB
                 mie_id, codigo = insertar_mie(
                     drm=drm,
                     pozo=nombre_instalacion,
@@ -462,7 +477,6 @@ if modo == "Nuevo MIA":
 
                 st.success(f"✅ MIA guardado. CÓDIGO: {codigo}")
 
-                # Fotos ANTES
                 if fotos:
                     for archivo in fotos:
                         nombre_destino = (
@@ -535,213 +549,92 @@ elif modo == "Historial":
         st.markdown("### Datos básicos del incidente")
         colb1, colb2 = st.columns(2)
         with colb1:
-            st.text_input(
-                "Número de incidente / DRM",
-                detalle.drm or "",
-                disabled=True,
-            )
+            st.text_input("Número de incidente / DRM", detalle.drm or "", disabled=True)
         with colb2:
-            st.text_input(
-                "Usuario que carga el MIA",
-                detalle.creado_por or "",
-                disabled=True,
-            )
+            st.text_input("Usuario que carga el MIA", detalle.creado_por or "", disabled=True)
 
         colf1, colf2 = st.columns(2)
         with colf1:
-            st.text_input(
-                "Fecha del evento",
-                str(detalle.fecha_hora_evento or ""),
-                disabled=True,
-            )
+            st.text_input("Fecha del evento", str(detalle.fecha_hora_evento or ""), disabled=True)
         with colf2:
-            st.text_input(
-                "Fecha de carga",
-                str(detalle.fecha_creacion_registro or ""),
-                disabled=True,
-            )
+            st.text_input("Fecha de carga", str(detalle.fecha_creacion_registro or ""), disabled=True)
 
         # ----- Personas involucradas -----
         st.markdown("### Personas involucradas")
 
         colp1a, colp1b = st.columns(2)
         with colp1a:
-            st.text_input(
-                "Observador - Apellido",
-                getattr(detalle, "observador_apellido", "") or "",
-                disabled=True,
-            )
+            st.text_input("Observador - Apellido", getattr(detalle, "observador_apellido", "") or "", disabled=True)
         with colp1b:
-            st.text_input(
-                "Observador - Nombre",
-                getattr(detalle, "observador_nombre", "") or "",
-                disabled=True,
-            )
+            st.text_input("Observador - Nombre", getattr(detalle, "observador_nombre", "") or "", disabled=True)
 
         colp2a, colp2b = st.columns(2)
         with colp2a:
-            st.text_input(
-                "Responsable de la instalación - Apellido",
-                getattr(detalle, "responsable_inst_apellido", "") or "",
-                disabled=True,
-            )
+            st.text_input("Responsable de la instalación - Apellido", getattr(detalle, "responsable_inst_apellido", "") or "", disabled=True)
         with colp2b:
-            st.text_input(
-                "Responsable de la instalación - Nombre",
-                getattr(detalle, "responsable_inst_nombre", "") or "",
-                disabled=True,
-            )
+            st.text_input("Responsable de la instalación - Nombre", getattr(detalle, "responsable_inst_nombre", "") or "", disabled=True)
 
         # ----- Ubicación / instalación -----
         st.markdown("### Ubicación / instalación")
         colu1, colu2, colu3 = st.columns(3)
         with colu1:
-            st.text_input(
-                "Yacimiento",
-                getattr(detalle, "yacimiento", "") or "",
-                disabled=True,
-            )
+            st.text_input("Yacimiento", getattr(detalle, "yacimiento", "") or "", disabled=True)
         with colu2:
-            st.text_input(
-                "Zona",
-                getattr(detalle, "zona", "") or "",
-                disabled=True,
-            )
+            st.text_input("Zona", getattr(detalle, "zona", "") or "", disabled=True)
         with colu3:
-            st.text_input(
-                "Nombre de la instalación",
-                getattr(detalle, "nombre_instalacion", "") or "",
-                disabled=True,
-            )
+            st.text_input("Nombre de la instalación", getattr(detalle, "nombre_instalacion", "") or "", disabled=True)
 
         coll1, coll2 = st.columns(2)
         with coll1:
-            st.text_input(
-                "Latitud",
-                getattr(detalle, "latitud", "") or "",
-                disabled=True,
-            )
+            st.text_input("Latitud", getattr(detalle, "latitud", "") or "", disabled=True)
         with coll2:
-            st.text_input(
-                "Longitud",
-                getattr(detalle, "longitud", "") or "",
-                disabled=True,
-            )
+            st.text_input("Longitud", getattr(detalle, "longitud", "") or "", disabled=True)
 
         # ----- Características del evento -----
         st.markdown("### Características del evento")
         colc1, colc2 = st.columns(2)
         with colc1:
-            st.text_input(
-                "Tipo de afectación",
-                getattr(detalle, "tipo_afectacion", "") or "",
-                disabled=True,
-            )
-            st.text_input(
-                "Tipo de derrame",
-                getattr(detalle, "tipo_derrame", "") or "",
-                disabled=True,
-            )
+            st.text_input("Tipo de afectación", getattr(detalle, "tipo_afectacion", "") or "", disabled=True)
+            st.text_input("Tipo de derrame", getattr(detalle, "tipo_derrame", "") or "", disabled=True)
         with colc2:
-            st.text_input(
-                "Tipo de instalación",
-                getattr(detalle, "tipo_instalacion", "") or "",
-                disabled=True,
-            )
-            st.text_input(
-                "Causa inmediata",
-                getattr(detalle, "causa_inmediata", "") or "",
-                disabled=True,
-            )
+            st.text_input("Tipo de instalación", getattr(detalle, "tipo_instalacion", "") or "", disabled=True)
+            st.text_input("Causa inmediata", getattr(detalle, "causa_inmediata", "") or "", disabled=True)
 
         # ----- Volúmenes y área afectada -----
         st.markdown("### Volúmenes y área afectada")
         colv1, colv2, colv3 = st.columns(3)
         with colv1:
-            st.text_input(
-                "Volumen bruto (m³)",
-                str(getattr(detalle, "volumen_bruto_m3", "") or ""),
-                disabled=True,
-            )
-            st.text_input(
-                "Volumen de crudo (m³)",
-                str(getattr(detalle, "volumen_crudo_m3", "") or ""),
-                disabled=True,
-            )
+            st.text_input("Volumen bruto (m³)", str(getattr(detalle, "volumen_bruto_m3", "") or ""), disabled=True)
+            st.text_input("Volumen de crudo (m³)", str(getattr(detalle, "volumen_crudo_m3", "") or ""), disabled=True)
         with colv2:
-            st.text_input(
-                "Volumen de gas (m³)",
-                str(getattr(detalle, "volumen_gas_m3", "") or ""),
-                disabled=True,
-            )
-            st.text_input(
-                "PPM o % de agua",
-                getattr(detalle, "ppm_agua", "") or "",
-                disabled=True,
-            )
+            st.text_input("Volumen de gas (m³)", str(getattr(detalle, "volumen_gas_m3", "") or ""), disabled=True)
+            st.text_input("PPM o % de agua", getattr(detalle, "ppm_agua", "") or "", disabled=True)
         with colv3:
-            st.text_input(
-                "Área afectada (m²)",
-                str(getattr(detalle, "area_afectada_m2", "") or ""),
-                disabled=True,
-            )
+            st.text_input("Área afectada (m²)", str(getattr(detalle, "area_afectada_m2", "") or ""), disabled=True)
 
         # ----- Recursos afectados -----
         st.markdown("### Recursos afectados")
-        st.text_area(
-            "Recursos afectados",
-            getattr(detalle, "recursos_afectados", "") or "",
-            disabled=True,
-        )
+        st.text_area("Recursos afectados", getattr(detalle, "recursos_afectados", "") or "", disabled=True)
 
         # ----- Otros datos / notas -----
         st.markdown("### Otros datos / notas")
         coln1, coln2 = st.columns(2)
         with coln1:
-            st.text_input(
-                "Causa probable",
-                detalle.causa_probable or "",
-                disabled=True,
-            )
+            st.text_input("Causa probable", detalle.causa_probable or "", disabled=True)
         with coln2:
-            st.text_input(
-                "Responsable",
-                detalle.responsable or "",
-                disabled=True,
-            )
+            st.text_input("Responsable", detalle.responsable or "", disabled=True)
 
-        st.text_area(
-            "Notas / Observaciones",
-            detalle.observaciones or "",
-            disabled=True,
-        )
-
-        st.text_area(
-            "Medidas inmediatas adoptadas",
-            getattr(detalle, "medidas_inmediatas", "") or "",
-            disabled=True,
-        )
+        st.text_area("Notas / Observaciones", detalle.observaciones or "", disabled=True)
+        st.text_area("Medidas inmediatas adoptadas", getattr(detalle, "medidas_inmediatas", "") or "", disabled=True)
 
         # ----- Aprobación -----
         st.markdown("### Aprobación")
         cola1, cola2 = st.columns(2)
         with cola1:
-            st.text_input(
-                "Aprobador - Apellido",
-                getattr(detalle, "aprobador_apellido", "") or "",
-                disabled=True,
-            )
-            st.text_input(
-                "Aprobador - Nombre",
-                getattr(detalle, "aprobador_nombre", "") or "",
-                disabled=True,
-            )
+            st.text_input("Aprobador - Apellido", getattr(detalle, "aprobador_apellido", "") or "", disabled=True)
+            st.text_input("Aprobador - Nombre", getattr(detalle, "aprobador_nombre", "") or "", disabled=True)
         with cola2:
-            st.text_input(
-                "Fecha y hora aprobación",
-                str(getattr(detalle, "fecha_hora_aprobacion", "") or ""),
-                disabled=True,
-            )
+            st.text_input("Fecha y hora aprobación", str(getattr(detalle, "fecha_hora_aprobacion", "") or ""), disabled=True)
 
         # ---------------------------------------------------
         # FOTOS ANTES / DESPUÉS
@@ -769,7 +662,6 @@ elif modo == "Historial":
         if detalle.estado == "CERRADO":
             st.subheader("✅ Datos de remediación")
 
-            # Campos remediación
             fecha_fin = getattr(detalle, "rem_fecha_fin_saneamiento", None)
             if not fecha_fin:
                 fecha_fin = getattr(detalle, "rem_fecha", None)
@@ -794,9 +686,6 @@ elif modo == "Historial":
 
             st.success("Este MIA ya está CERRADO.")
 
-            # ---------------------------------------------------
-            # PDF FINAL DESDE HISTORIAL
-            # ---------------------------------------------------
             st.subheader("📄 Generar PDF de este MIA")
 
             try:
@@ -829,7 +718,6 @@ elif modo == "Historial":
         else:
             st.subheader("🛠️ Cargar datos de remediación y CERRAR MIA")
 
-            # Fecha fin saneamiento
             colr1, colr2 = st.columns(2)
             with colr1:
                 fecha_fin = st.date_input(
@@ -838,15 +726,17 @@ elif modo == "Historial":
                     key=f"rem_fecha_{mie_id}",
                 )
             with colr2:
-                hora_fin = st.time_input(
+                ahora = datetime.now().time().replace(microsecond=0)
+                hora_fin = st.selectbox(
                     "Hora finalización",
-                    datetime.now().time(),
+                    options=HORAS_OPTS,
+                    format_func=lambda t: t.strftime("%H:%M"),
+                    index=_nearest_index(HORAS_OPTS, ahora),
                     key=f"rem_hora_{mie_id}",
                 )
 
             fecha_fin_dt = datetime.combine(fecha_fin, hora_fin)
 
-            # Volúmenes
             colv1r, colv2r = st.columns(2)
             with colv1r:
                 vol_tierra = st.number_input(
@@ -863,29 +753,15 @@ elif modo == "Historial":
                     key=f"vol_liq_{mie_id}",
                 )
 
-            destino_tierra = st.text_input(
-                "Destino tierra impactada",
-                key=f"destino_{mie_id}",
-            )
-
-            comentarios = st.text_area(
-                "Comentarios de remediación",
-                key=f"coment_{mie_id}",
-            )
+            destino_tierra = st.text_input("Destino tierra impactada", key=f"destino_{mie_id}")
+            comentarios = st.text_area("Comentarios de remediación", key=f"coment_{mie_id}")
 
             colap1, colap2 = st.columns(2)
             with colap1:
-                aprob_ap = st.text_input(
-                    "Aprobador final - Apellido",
-                    key=f"ap_ap_{mie_id}",
-                )
+                aprob_ap = st.text_input("Aprobador final - Apellido", key=f"ap_ap_{mie_id}")
             with colap2:
-                aprob_no = st.text_input(
-                    "Aprobador final - Nombre",
-                    key=f"ap_no_{mie_id}",
-                )
+                aprob_no = st.text_input("Aprobador final - Nombre", key=f"ap_no_{mie_id}")
 
-            # Fotos DESPUÉS
             st.markdown("### 📸 Fotos DESPUÉS del Saneamiento")
             fotos_despues = st.file_uploader(
                 "Subir fotos",
@@ -894,11 +770,7 @@ elif modo == "Historial":
                 key=f"fotos_desp_{mie_id}",
             )
 
-            # Botón cerrar
-            if st.button(
-                "✔️ Guardar remediación y CERRAR MIA",
-                key=f"btn_cerrar_{mie_id}",
-            ):
+            if st.button("✔️ Guardar remediación y CERRAR MIA", key=f"btn_cerrar_{mie_id}"):
                 try:
                     cerrar_mie_con_remediacion(
                         mie_id,
@@ -911,7 +783,6 @@ elif modo == "Historial":
                         aprob_no,
                     )
 
-                    # Guardar fotos DESPUÉS
                     if fotos_despues:
                         codigo = detalle.codigo_mie
                         for archivo in fotos_despues:
@@ -931,13 +802,9 @@ elif modo == "Historial":
 # =======================================================
 #  MODO 2.5 - ESTADISTICAS
 # =======================================================
-
 elif modo == "Estadísticas":
     st.header("Estadísticas de MIA")
 
-    # ==========================
-    # 1) Cargar datos completos
-    # ==========================
     from mie_backend import obtener_todos_mie
     import pandas as pd
 
@@ -946,17 +813,12 @@ elif modo == "Estadísticas":
         st.info("No hay MIA registrados para generar estadísticas.")
         st.stop()
 
-    # Convertir a DataFrame
     df = pd.DataFrame([dict(r) for r in registros])
 
-    # Asegurar fechas sin timezone
     for col in ["fecha_hora_evento", "fecha_creacion_registro", "rem_fecha_fin_saneamiento"]:
         if col in df.columns:
             df[col] = pd.to_datetime(df[col], errors="coerce", utc=True).dt.tz_localize(None)
 
-    # ==========================
-    # 2) Filtros globales
-    # ==========================
     st.subheader("Filtros")
 
     col_f1, col_f2 = st.columns(2)
@@ -989,7 +851,6 @@ elif modo == "Estadísticas":
 
     estado_sel = st.selectbox("Estado del MIA", ["(Todos)"] + estados)
 
-    # Aplicar filtros
     df_filt = df.copy()
 
     df_filt = df_filt[
@@ -1013,17 +874,12 @@ elif modo == "Estadísticas":
         st.warning("No hay MIA que coincidan con los filtros seleccionados.")
         st.stop()
 
-    # ============================================================
-    # 3) DASHBOARD EJECUTIVO (solo métricas clave)
-    # ============================================================
     st.subheader("📊 Dashboard Ejecutivo (MIA)")
 
-    # MÉTRICAS BASE
     total_mia = len(df_filt)
     abiertos = len(df_filt[df_filt["estado"] == "ABIERTO"])
     cerrados = len(df_filt[df_filt["estado"] == "CERRADO"])
 
-    # TIEMPO PROMEDIO DE CIERRE
     df_cerrados = df_filt.dropna(subset=["rem_fecha_fin_saneamiento"])
     if not df_cerrados.empty:
         df_cerrados["dias_cierre"] = (
@@ -1033,14 +889,12 @@ elif modo == "Estadísticas":
     else:
         promedio_cierre = "—"
 
-    # VOLUMEN ACTIVO Y REMEDIADO
     volumen_activo = df_filt[df_filt["estado"] == "ABIERTO"]["volumen_estimado_m3"].sum()
     volumen_remediado = (
         df_filt["rem_volumen_liquido_recuperado"].fillna(0)
         + df_filt["rem_volumen_tierra_levantada"].fillna(0)
     ).sum()
 
-    # MAGNITUD
     df_mag = df_filt["magnitud"].value_counts().to_dict()
     n1 = df_mag.get("N1", 0)
     n2 = df_mag.get("N2", 0)
@@ -1048,13 +902,11 @@ elif modo == "Estadísticas":
 
     def pct(v): return f"{(v / total_mia * 100):.1f}%" if total_mia > 0 else "0%"
 
-    # -------- Fila 1 --------
     col1, col2, col3 = st.columns(3)
     col1.metric("MIA Totales", total_mia)
     col2.metric("MIA Abiertos", abiertos)
     col3.metric("MIA Cerrados", cerrados)
 
-    # -------- Fila 2 --------
     col4, col5, col6 = st.columns(3)
     col4.metric("⏱️ Tiempo promedio de cierre (días)", promedio_cierre)
     col5.metric("🛢️ Volumen activo (m³)", round(volumen_activo, 2))
@@ -1062,7 +914,6 @@ elif modo == "Estadísticas":
 
     st.divider()
 
-    # -------- Magnitud --------
     st.subheader("Distribución por Magnitud del Evento")
     st.write(
         f"""
@@ -1074,49 +925,23 @@ elif modo == "Estadísticas":
 
     st.divider()
 
-    # ============================================================
-    # 4) GRÁFICOS Y DISTRIBUCIONES (versión Plotly)
-    # ============================================================
-    import plotly.graph_objects as go
     import plotly.express as px
 
-    # --------------------------
-    # Evolución mensual
-    # --------------------------
     st.subheader("Evolución de MIA por mes")
 
     if "fecha_hora_evento" in df_filt.columns:
         df_tmp = df_filt.copy()
-        df_tmp["mes"] = (
-            df_tmp["fecha_hora_evento"]
-            .dt.to_period("M")
-            .dt.to_timestamp()
-        )
+        df_tmp["mes"] = df_tmp["fecha_hora_evento"].dt.to_period("M").dt.to_timestamp()
 
-        # Totales por mes
         df_mes_total = (
-            df_tmp
-            .groupby("mes")
-            .size()
-            .reset_index(name="total_mia")
-            .sort_values("mes")
+            df_tmp.groupby("mes").size().reset_index(name="total_mia").sort_values("mes")
         )
 
-        # Cerrados por mes
         if "estado" in df_tmp.columns:
             df_cerr_tmp = df_tmp[df_tmp["estado"] == "CERRADO"].copy()
             if not df_cerr_tmp.empty:
-                df_cerr_tmp["mes"] = (
-                    df_cerr_tmp["fecha_hora_evento"]
-                    .dt.to_period("M")
-                    .dt.to_timestamp()
-                )
-                df_mes_cerr = (
-                    df_cerr_tmp
-                    .groupby("mes")
-                    .size()
-                    .reset_index(name="cerrados_mia")
-                )
+                df_cerr_tmp["mes"] = df_cerr_tmp["fecha_hora_evento"].dt.to_period("M").dt.to_timestamp()
+                df_mes_cerr = df_cerr_tmp.groupby("mes").size().reset_index(name="cerrados_mia")
             else:
                 df_mes_cerr = df_mes_total[["mes"]].copy()
                 df_mes_cerr["cerrados_mia"] = 0
@@ -1128,15 +953,7 @@ elif modo == "Estadísticas":
         df_evo["mes_str"] = df_evo["mes"].dt.strftime("%Y-%m")
 
         fig = go.Figure()
-
-        # Barras: MIA totales
-        fig.add_trace(go.Bar(
-            x=df_evo["mes_str"],
-            y=df_evo["total_mia"],
-            name="MIA totales"
-        ))
-
-        # Línea: MIA cerrados
+        fig.add_trace(go.Bar(x=df_evo["mes_str"], y=df_evo["total_mia"], name="MIA totales"))
         fig.add_trace(go.Scatter(
             x=df_evo["mes_str"],
             y=df_evo["cerrados_mia"],
@@ -1159,26 +976,12 @@ elif modo == "Estadísticas":
     else:
         st.info("No se encontró la columna 'fecha_hora_evento' para graficar evolución mensual.")
 
-    # --------------------------
-    # MIA por yacimiento
-    # --------------------------
     st.subheader("Distribución de MIA por Yacimiento")
-
     if "yacimiento" in df_filt.columns:
-        df_yac = (
-            df_filt
-            .groupby("yacimiento")
-            .size()
-            .reset_index(name="cantidad")
-            .sort_values("cantidad", ascending=False)
-        )
-
+        df_yac = df_filt.groupby("yacimiento").size().reset_index(name="cantidad").sort_values("cantidad", ascending=False)
         if not df_yac.empty:
             fig_yac = px.bar(
-                df_yac,
-                x="cantidad",
-                y="yacimiento",
-                orientation="h",
+                df_yac, x="cantidad", y="yacimiento", orientation="h",
                 title="MIA por Yacimiento",
                 labels={"cantidad": "Cantidad de MIA", "yacimiento": "Yacimiento"},
             )
@@ -1189,138 +992,69 @@ elif modo == "Estadísticas":
     else:
         st.info("No se encontró la columna 'yacimiento'.")
 
-    # --------------------------
-    # MIA por tipo de instalación
-    # --------------------------
     st.subheader("Distribución de MIA por Tipo de Instalación")
-
     if "tipo_instalacion" in df_filt.columns:
-        df_inst = (
-            df_filt
-            .groupby("tipo_instalacion")
-            .size()
-            .reset_index(name="cantidad")
-            .sort_values("cantidad", ascending=False)
-        )
-
+        df_inst = df_filt.groupby("tipo_instalacion").size().reset_index(name="cantidad").sort_values("cantidad", ascending=False)
         if not df_inst.empty:
             fig_inst = px.bar(
-                df_inst,
-                x="tipo_instalacion",
-                y="cantidad",
+                df_inst, x="tipo_instalacion", y="cantidad",
                 title="MIA por Tipo de Instalación",
                 labels={"cantidad": "Cantidad de MIA", "tipo_instalacion": "Tipo de Instalación"},
             )
-            fig_inst.update_layout(
-                template="plotly_white",
-                xaxis_tickangle=-30,
-                margin=dict(l=40, r=20, t=60, b=80),
-            )
+            fig_inst.update_layout(template="plotly_white", xaxis_tickangle=-30, margin=dict(l=40, r=20, t=60, b=80))
             st.plotly_chart(fig_inst, use_container_width=True)
         else:
             st.info("No hay datos para mostrar por tipo de instalación.")
     else:
         st.info("No se encontró la columna 'tipo_instalacion'.")
 
-    # --------------------------
-    # MIA por causa inmediata
-    # --------------------------
     st.subheader("Distribución de MIA por Causa Inmediata")
-
     if "causa_inmediata" in df_filt.columns:
-        df_causa = (
-            df_filt
-            .groupby("causa_inmediata")
-            .size()
-            .reset_index(name="cantidad")
-            .sort_values("cantidad", ascending=False)
-        )
-
+        df_causa = df_filt.groupby("causa_inmediata").size().reset_index(name="cantidad").sort_values("cantidad", ascending=False)
         if not df_causa.empty:
             fig_causa = px.bar(
-                df_causa,
-                x="causa_inmediata",
-                y="cantidad",
+                df_causa, x="causa_inmediata", y="cantidad",
                 title="MIA por Causa Inmediata",
                 labels={"cantidad": "Cantidad de MIA", "causa_inmediata": "Causa Inmediata"},
             )
-            fig_causa.update_layout(
-                template="plotly_white",
-                xaxis_tickangle=-30,
-                margin=dict(l=40, r=20, t=60, b=80),
-            )
+            fig_causa.update_layout(template="plotly_white", xaxis_tickangle=-30, margin=dict(l=40, r=20, t=60, b=80))
             st.plotly_chart(fig_causa, use_container_width=True)
         else:
             st.info("No hay datos para mostrar por causa inmediata.")
     else:
         st.info("No se encontró la columna 'causa_inmediata'.")
 
-    # --------------------------
-    # MIA por tipo de afectación
-    # --------------------------
     st.subheader("Distribución de MIA por Tipo de Afectación")
-
     if "tipo_afectacion" in df_filt.columns:
-        df_afec = (
-            df_filt
-            .groupby("tipo_afectacion")
-            .size()
-            .reset_index(name="cantidad")
-            .sort_values("cantidad", ascending=False)
-        )
-
+        df_afec = df_filt.groupby("tipo_afectacion").size().reset_index(name="cantidad").sort_values("cantidad", ascending=False)
         if not df_afec.empty:
             fig_afec = px.bar(
-                df_afec,
-                x="tipo_afectacion",
-                y="cantidad",
+                df_afec, x="tipo_afectacion", y="cantidad",
                 title="MIA por Tipo de Afectación",
                 labels={"cantidad": "Cantidad de MIA", "tipo_afectacion": "Tipo de Afectación"},
             )
-            fig_afec.update_layout(
-                template="plotly_white",
-                xaxis_tickangle=-30,
-                margin=dict(l=40, r=20, t=60, b=80),
-            )
+            fig_afec.update_layout(template="plotly_white", xaxis_tickangle=-30, margin=dict(l=40, r=20, t=60, b=80))
             st.plotly_chart(fig_afec, use_container_width=True)
         else:
             st.info("No hay datos para mostrar por tipo de afectación.")
     else:
         st.info("No se encontró la columna 'tipo_afectacion'.")
 
-    # --------------------------
-    # MIA por tipo de derrame
-    # --------------------------
     st.subheader("Distribución de MIA por Tipo de Derrame")
-
     if "tipo_derrame" in df_filt.columns:
-        df_der = (
-            df_filt
-            .groupby("tipo_derrame")
-            .size()
-            .reset_index(name="cantidad")
-            .sort_values("cantidad", ascending=False)
-        )
-
+        df_der = df_filt.groupby("tipo_derrame").size().reset_index(name="cantidad").sort_values("cantidad", ascending=False)
         if not df_der.empty:
             fig_der = px.bar(
-                df_der,
-                x="tipo_derrame",
-                y="cantidad",
+                df_der, x="tipo_derrame", y="cantidad",
                 title="MIA por Tipo de Derrame",
                 labels={"cantidad": "Cantidad de MIA", "tipo_derrame": "Tipo de Derrame"},
             )
-            fig_der.update_layout(
-                template="plotly_white",
-                xaxis_tickangle=-30,
-                margin=dict(l=40, r=20, t=60, b=80),
-            )
+            fig_der.update_layout(template="plotly_white", xaxis_tickangle=-30, margin=dict(l=40, r=20, t=60, b=80))
             st.plotly_chart(fig_der, use_container_width=True)
         else:
             st.info("No hay datos para mostrar por tipo de derrame.")
     else:
         st.info("No se encontró la columna 'tipo_derrame'.")
-
 
 # =======================================================
 #  MODO 3 - EXPORTAR MIA A EXCEL
@@ -1345,26 +1079,20 @@ elif modo == "Exportar MIA":
             if not registros:
                 st.info("No existen registros de MIA para exportar.")
             else:
-                # Convertimos filas a DataFrame
                 filas = [dict(r) for r in registros]
                 df = pd.DataFrame(filas)
 
-                # 🔥🔥🔥 FIX: Excel no acepta timezone → convertimos todas las columnas datetime
                 for col in df.columns:
                     if pd.api.types.is_datetime64_any_dtype(df[col]):
                         df[col] = pd.to_datetime(df[col], utc=True).dt.tz_localize(None)
 
-                # Generar Excel
                 buffer = BytesIO()
-
                 with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
                     df.to_excel(writer, index=False, sheet_name="MIA")
 
                 buffer.seek(0)
 
-                nombre_archivo = (
-                    f"MIA_mie_eventos_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx"
-                )
+                nombre_archivo = f"MIA_mie_eventos_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx"
 
                 st.download_button(
                     "📥 Descargar Excel",
@@ -1375,6 +1103,7 @@ elif modo == "Exportar MIA":
 
         except Exception as e:
             st.error(f"❌ Error al generar la exportación: {e}")
+
 
 
 
