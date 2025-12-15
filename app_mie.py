@@ -2,7 +2,6 @@ import streamlit as st
 from datetime import datetime, date, time
 from io import BytesIO
 import pandas as pd
-import plotly.graph_objects as go
 
 # =======================================================
 #   CONFIGURACIÓN GENERAL (DEBE IR ANTES DE CUALQUIER st.*)
@@ -31,7 +30,6 @@ def _nearest_index(opts, t):
             best_i = i
     return best_i
 
-# Lista global de horarios (cada 5 min)
 HORAS_OPTS = _time_options(step_minutes=5)
 
 # ==========================
@@ -47,7 +45,7 @@ st.markdown("""
 
     /* --- Títulos principales --- */
     h1, h2, h3 {
-        color: #003366 !important;    /* Azul petróleo corporativo */
+        color: #003366 !important;
         font-weight: 700 !important;
         letter-spacing: 0.5px;
     }
@@ -58,7 +56,7 @@ st.markdown("""
         font-weight: 600 !important;
     }
 
-    /* --- Divider estilo auditoría --- */
+    /* --- Divider --- */
     hr {
         border: 0;
         height: 2px;
@@ -145,7 +143,7 @@ st.markdown("""
 # ==========================
 #  LOGIN SIMPLE POR CONTRASEÑA
 # ==========================
-APP_PASSWORD = "MIE2025"  # 🔐 cambiala por la que quieras
+APP_PASSWORD = "MIE2025"
 
 if "auth_ok" not in st.session_state:
     st.session_state["auth_ok"] = False
@@ -167,7 +165,9 @@ if not st.session_state["auth_ok"]:
 
     st.stop()
 
-# Si llegó acá, está autenticado
+# ==========================
+# Imports backend (ya autenticado)
+# ==========================
 from mie_backend import (
     insertar_mie,
     insertar_foto,
@@ -175,13 +175,16 @@ from mie_backend import (
     listar_mie,
     obtener_mie_detalle,
     obtener_fotos_mie,
-    actualizar_mie_basico,
     cerrar_mie_con_remediacion,
     obtener_todos_mie,
+    actualizar_mie_completo,   # 👈 NUEVO (lo hacemos en mie_backend.py)
 )
 
-from mie_pdf_email import generar_mie_pdf  # genera el PDF en memoria
+from mie_pdf_email import generar_mie_pdf
 
+# =======================================================
+#   APP
+# =======================================================
 st.title("🌱 Gestión de MIA (Incidentes Ambientales Declarados)")
 
 modo = st.sidebar.radio(
@@ -211,12 +214,11 @@ if modo == "Nuevo MIA":
             options=HORAS_OPTS,
             format_func=lambda t: t.strftime("%H:%M"),
             index=_nearest_index(HORAS_OPTS, ahora),
-            key="hora_evento",
+            key="hora_evento_nuevo",
         )
 
     fecha_hora_evento = datetime.combine(fecha_evento, hora_evento)
 
-    # Número MIA autogenerado
     st.text_input(
         "Número de incidente / MIA",
         value="Se genera automáticamente al guardar",
@@ -339,7 +341,6 @@ if modo == "Nuevo MIA":
         area_afectada_m2 = st.number_input("Área afectada (m²)", min_value=0.0, step=1.0)
 
     col_v4, col_v5 = st.columns(2)
-
     with col_v5:
         ppm_agua = st.number_input(
             "% de agua",
@@ -410,7 +411,7 @@ if modo == "Nuevo MIA":
             options=HORAS_OPTS,
             format_func=lambda t: t.strftime("%H:%M"),
             index=_nearest_index(HORAS_OPTS, ahora),
-            key="hora_aprob",
+            key="hora_aprob_nuevo",
         )
 
     fecha_hora_aprobacion = (
@@ -520,293 +521,603 @@ if modo == "Nuevo MIA":
             )
 
 # =======================================================
-#  MODO 2 - HISTORIAL MIA
+#  MODO 2 - HISTORIAL MIA (CON EDICIÓN)
 # =======================================================
 elif modo == "Historial":
     st.header("Historial de MIA")
 
     registros = listar_mie()
-
     if not registros:
         st.info("No hay MIA registrados.")
-    else:
+        st.stop()
 
-        opciones = {}
-        for r in registros:
-            nombre = getattr(r, "nombre_instalacion", None) or r.pozo or "(sin instalación)"
-            label = f"{r.codigo_mie} - {nombre} ({r.estado})"
-            opciones[label] = r.mie_id
+    opciones = {}
+    for r in registros:
+        nombre = getattr(r, "nombre_instalacion", None) or r.pozo or "(sin instalación)"
+        label = f"{r.codigo_mie} - {nombre} ({r.estado})"
+        opciones[label] = r.mie_id
 
-        seleccion = st.selectbox("Seleccionar MIA", list(opciones.keys()))
-        mie_id = opciones[seleccion]
+    seleccion = st.selectbox("Seleccionar MIA", list(opciones.keys()), key="hist_sel_mie")
+    mie_id = opciones[seleccion]
 
-        detalle = obtener_mie_detalle(mie_id)
-        fotos = obtener_fotos_mie(mie_id)
+    detalle = obtener_mie_detalle(mie_id)
+    fotos = obtener_fotos_mie(mie_id)
 
-        st.subheader("📄 Datos del MIA")
+    if "edit_mie_id" not in st.session_state:
+        st.session_state["edit_mie_id"] = None
 
-        # ----- Datos básicos -----
-        st.markdown("### Datos básicos del incidente")
-        colb1, colb2 = st.columns(2)
-        with colb1:
-            st.text_input("Número de incidente / DRM", detalle.drm or "", disabled=True)
-        with colb2:
-            st.text_input("Usuario que carga el MIA", detalle.creado_por or "", disabled=True)
+    editando = (st.session_state["edit_mie_id"] == mie_id)
 
-        colf1, colf2 = st.columns(2)
-        with colf1:
-            st.text_input("Fecha del evento", str(detalle.fecha_hora_evento or ""), disabled=True)
-        with colf2:
-            st.text_input("Fecha de carga", str(detalle.fecha_creacion_registro or ""), disabled=True)
+    st.subheader("📄 Datos del MIA")
 
-        # ----- Personas involucradas -----
-        st.markdown("### Personas involucradas")
-
-        colp1a, colp1b = st.columns(2)
-        with colp1a:
-            st.text_input("Observador - Apellido", getattr(detalle, "observador_apellido", "") or "", disabled=True)
-        with colp1b:
-            st.text_input("Observador - Nombre", getattr(detalle, "observador_nombre", "") or "", disabled=True)
-
-        colp2a, colp2b = st.columns(2)
-        with colp2a:
-            st.text_input("Responsable de la instalación - Apellido", getattr(detalle, "responsable_inst_apellido", "") or "", disabled=True)
-        with colp2b:
-            st.text_input("Responsable de la instalación - Nombre", getattr(detalle, "responsable_inst_nombre", "") or "", disabled=True)
-
-        # ----- Ubicación / instalación -----
-        st.markdown("### Ubicación / instalación")
-        colu1, colu2, colu3 = st.columns(3)
-        with colu1:
-            st.text_input("Yacimiento", getattr(detalle, "yacimiento", "") or "", disabled=True)
-        with colu2:
-            st.text_input("Zona", getattr(detalle, "zona", "") or "", disabled=True)
-        with colu3:
-            st.text_input("Nombre de la instalación", getattr(detalle, "nombre_instalacion", "") or "", disabled=True)
-
-        coll1, coll2 = st.columns(2)
-        with coll1:
-            st.text_input("Latitud", getattr(detalle, "latitud", "") or "", disabled=True)
-        with coll2:
-            st.text_input("Longitud", getattr(detalle, "longitud", "") or "", disabled=True)
-
-        # ----- Características del evento -----
-        st.markdown("### Características del evento")
-        colc1, colc2 = st.columns(2)
-        with colc1:
-            st.text_input("Tipo de afectación", getattr(detalle, "tipo_afectacion", "") or "", disabled=True)
-            st.text_input("Tipo de derrame", getattr(detalle, "tipo_derrame", "") or "", disabled=True)
-        with colc2:
-            st.text_input("Tipo de instalación", getattr(detalle, "tipo_instalacion", "") or "", disabled=True)
-            st.text_input("Causa inmediata", getattr(detalle, "causa_inmediata", "") or "", disabled=True)
-
-        # ----- Volúmenes y área afectada -----
-        st.markdown("### Volúmenes y área afectada")
-        colv1, colv2, colv3 = st.columns(3)
-        with colv1:
-            st.text_input("Volumen bruto (m³)", str(getattr(detalle, "volumen_bruto_m3", "") or ""), disabled=True)
-            st.text_input("Volumen de crudo (m³)", str(getattr(detalle, "volumen_crudo_m3", "") or ""), disabled=True)
-        with colv2:
-            st.text_input("Volumen de gas (m³)", str(getattr(detalle, "volumen_gas_m3", "") or ""), disabled=True)
-            st.text_input("PPM o % de agua", getattr(detalle, "ppm_agua", "") or "", disabled=True)
-        with colv3:
-            st.text_input("Área afectada (m²)", str(getattr(detalle, "area_afectada_m2", "") or ""), disabled=True)
-
-        # ----- Recursos afectados -----
-        st.markdown("### Recursos afectados")
-        st.text_area("Recursos afectados", getattr(detalle, "recursos_afectados", "") or "", disabled=True)
-
-        # ----- Otros datos / notas -----
-        st.markdown("### Otros datos / notas")
-        coln1, coln2 = st.columns(2)
-        with coln1:
-            st.text_input("Causa probable", detalle.causa_probable or "", disabled=True)
-        with coln2:
-            st.text_input("Responsable", detalle.responsable or "", disabled=True)
-
-        st.text_area("Notas / Observaciones", detalle.observaciones or "", disabled=True)
-        st.text_area("Medidas inmediatas adoptadas", getattr(detalle, "medidas_inmediatas", "") or "", disabled=True)
-
-        # ----- Aprobación -----
-        st.markdown("### Aprobación")
-        cola1, cola2 = st.columns(2)
-        with cola1:
-            st.text_input("Aprobador - Apellido", getattr(detalle, "aprobador_apellido", "") or "", disabled=True)
-            st.text_input("Aprobador - Nombre", getattr(detalle, "aprobador_nombre", "") or "", disabled=True)
-        with cola2:
-            st.text_input("Fecha y hora aprobación", str(getattr(detalle, "fecha_hora_aprobacion", "") or ""), disabled=True)
-
-        # ---------------------------------------------------
-        # FOTOS ANTES / DESPUÉS
-        # ---------------------------------------------------
-        st.subheader("📸 Fotos asociadas")
-
-        fotos_antes = [f for f in fotos if f["tipo"] == "ANTES"]
-        fotos_despues = [f for f in fotos if f["tipo"] == "DESPUES"]
-
-        if fotos_antes:
-            st.markdown("#### Fotos del incidente (ANTES)")
-            for f in fotos_antes:
-                st.markdown(f"**{f['fecha_hora']}**")
-                st.image(f["data"], use_container_width=True)
-
-        if fotos_despues:
-            st.markdown("#### Fotos de remediación (DESPUÉS)")
-            for f in fotos_despues:
-                st.markdown(f"**{f['fecha_hora']}**")
-                st.image(f["data"], use_container_width=True)
-
-        # ---------------------------------------------------
-        # BLOQUE DE REMEDIACIÓN
-        # ---------------------------------------------------
-        if detalle.estado == "CERRADO":
-            st.subheader("✅ Datos de remediación")
-
-            fecha_fin = getattr(detalle, "rem_fecha_fin_saneamiento", None)
-            if not fecha_fin:
-                fecha_fin = getattr(detalle, "rem_fecha", None)
-
-            vol_tierra = getattr(detalle, "rem_volumen_tierra_levantada", None)
-            destino_tierra = getattr(detalle, "rem_destino_tierra_impactada", None)
-            vol_liquido = getattr(detalle, "rem_volumen_liquido_recuperado", None)
-            comentarios = (
-                getattr(detalle, "rem_comentarios", None)
-                or getattr(detalle, "rem_detalle", None)
-            )
-            aprob_ap = getattr(detalle, "rem_aprobador_apellido", "")
-            aprob_no = getattr(detalle, "rem_aprobador_nombre", "")
-
-            st.write(f"**Fecha fin saneamiento:** {fecha_fin or '-'}")
-            st.write(f"**Volumen tierra levantada (m³):** {vol_tierra or '-'}")
-            st.write(f"**Destino tierra impactada:** {destino_tierra or '-'}")
-            st.write(f"**Volumen líquido recuperado (m³):** {vol_liquido or '-'}")
-            st.write("**Comentarios:**")
-            st.write(comentarios or "-")
-            st.write(f"**Aprobador final:** {aprob_ap} {aprob_no}")
-
-            st.success("Este MIA ya está CERRADO.")
-
-            st.subheader("📄 Generar PDF de este MIA")
-
-            try:
-                pdf_bytes_hist = generar_mie_pdf(detalle, fotos)
-            except Exception as e:
-                st.error(f"⚠️ Error generando PDF: {e}")
-            else:
-                nombre_inst = (
-                    getattr(detalle, "nombre_instalacion", None)
-                    or detalle.pozo
-                    or ""
-                ).strip()
-
-                file_name_hist = (
-                    f"{detalle.codigo_mie} - {nombre_inst}.pdf"
-                    if nombre_inst
-                    else f"{detalle.codigo_mie}.pdf"
-                )
-
-                st.download_button(
-                    "📄 Descargar PDF de este MIA",
-                    data=pdf_bytes_hist,
-                    file_name=file_name_hist,
-                    mime="application/pdf",
-                )
-
-        # ---------------------------------------------------
-        # FORMULARIO PARA CERRAR (si aún está abierto)
-        # ---------------------------------------------------
+    # Botonera
+    c1, c2, c3 = st.columns([1, 1, 6])
+    with c1:
+        if not editando:
+            if st.button("✏️ Editar", key=f"btn_edit_{mie_id}"):
+                st.session_state["edit_mie_id"] = mie_id
+                st.rerun()
         else:
-            st.subheader("🛠️ Cargar datos de remediación y CERRAR MIA")
+            st.success("Modo edición activado")
 
-            colr1, colr2 = st.columns(2)
-            with colr1:
-                fecha_fin = st.date_input(
-                    "Fecha finalización saneamiento",
-                    datetime.now().date(),
-                    key=f"rem_fecha_{mie_id}",
-                )
-            with colr2:
-                ahora = datetime.now().time().replace(microsecond=0)
-                hora_fin = st.selectbox(
-                    "Hora finalización",
-                    options=HORAS_OPTS,
-                    format_func=lambda t: t.strftime("%H:%M"),
-                    index=_nearest_index(HORAS_OPTS, ahora),
-                    key=f"rem_hora_{mie_id}",
-                )
+    with c2:
+        if editando:
+            if st.button("❌ Cancelar", key=f"btn_cancel_{mie_id}"):
+                st.session_state["edit_mie_id"] = None
+                st.rerun()
 
-            fecha_fin_dt = datetime.combine(fecha_fin, hora_fin)
+    def _to_datetime(val):
+        try:
+            if val is None or val == "":
+                return None
+            return pd.to_datetime(val).to_pydatetime()
+        except Exception:
+            return None
 
-            colv1r, colv2r = st.columns(2)
-            with colv1r:
-                vol_tierra = st.number_input(
-                    "Volumen tierra levantada (m³)",
-                    min_value=0.0,
-                    step=0.1,
-                    key=f"vol_tierra_{mie_id}",
-                )
-            with colv2r:
-                vol_liquido = st.number_input(
-                    "Volumen líquido recuperado (m³)",
-                    min_value=0.0,
-                    step=0.1,
-                    key=f"vol_liq_{mie_id}",
-                )
+    dt_evento = _to_datetime(getattr(detalle, "fecha_hora_evento", None)) or datetime.now()
+    dt_aprob  = _to_datetime(getattr(detalle, "fecha_hora_aprobacion", None))
 
-            destino_tierra = st.text_input("Destino tierra impactada", key=f"destino_{mie_id}")
-            comentarios = st.text_area("Comentarios de remediación", key=f"coment_{mie_id}")
+    fecha_evento_def = dt_evento.date()
+    hora_evento_def  = dt_evento.time().replace(microsecond=0)
 
-            colap1, colap2 = st.columns(2)
-            with colap1:
-                aprob_ap = st.text_input("Aprobador final - Apellido", key=f"ap_ap_{mie_id}")
-            with colap2:
-                aprob_no = st.text_input("Aprobador final - Nombre", key=f"ap_no_{mie_id}")
+    if dt_aprob:
+        fecha_aprob_def = dt_aprob.date()
+        hora_aprob_def  = dt_aprob.time().replace(microsecond=0)
+    else:
+        fecha_aprob_def = date.today()
+        hora_aprob_def  = datetime.now().time().replace(microsecond=0)
 
-            st.markdown("### 📸 Fotos DESPUÉS del Saneamiento")
-            fotos_despues = st.file_uploader(
-                "Subir fotos",
-                type=["jpg", "jpeg", "png"],
-                accept_multiple_files=True,
-                key=f"fotos_desp_{mie_id}",
+    # ----- Datos básicos -----
+    st.markdown("### Datos básicos del incidente")
+    colb1, colb2 = st.columns(2)
+    with colb1:
+        st.text_input(
+            "Número de incidente / DRM",
+            getattr(detalle, "drm", "") or "",
+            disabled=True,
+            key=f"drm_{mie_id}",
+        )
+    with colb2:
+        creado_por = st.text_input(
+            "Usuario que carga el MIA",
+            getattr(detalle, "creado_por", "") or "",
+            disabled=(not editando),
+            key=f"creado_por_{mie_id}",
+        )
+
+    colf1, colf2 = st.columns(2)
+    with colf1:
+        fecha_evento = st.date_input(
+            "Fecha del evento",
+            value=fecha_evento_def,
+            disabled=(not editando),
+            key=f"fecha_evento_{mie_id}",
+        )
+        hora_evento = st.selectbox(
+            "Hora del evento",
+            options=HORAS_OPTS,
+            format_func=lambda t: t.strftime("%H:%M"),
+            index=_nearest_index(HORAS_OPTS, hora_evento_def),
+            disabled=(not editando),
+            key=f"hora_evento_{mie_id}",
+        )
+    with colf2:
+        st.text_input(
+            "Fecha de carga",
+            str(getattr(detalle, "fecha_creacion_registro", "") or ""),
+            disabled=True,
+            key=f"fecha_carga_{mie_id}",
+        )
+
+    fecha_hora_evento = datetime.combine(fecha_evento, hora_evento)
+
+    # ----- Personas involucradas -----
+    st.markdown("### Personas involucradas")
+
+    colp1a, colp1b = st.columns(2)
+    with colp1a:
+        observador_apellido = st.text_input(
+            "Observador - Apellido",
+            getattr(detalle, "observador_apellido", "") or "",
+            disabled=(not editando),
+            key=f"obs_ap_{mie_id}",
+        )
+    with colp1b:
+        observador_nombre = st.text_input(
+            "Observador - Nombre",
+            getattr(detalle, "observador_nombre", "") or "",
+            disabled=(not editando),
+            key=f"obs_no_{mie_id}",
+        )
+
+    colp2a, colp2b = st.columns(2)
+    with colp2a:
+        responsable_inst_apellido = st.text_input(
+            "Responsable de la instalación - Apellido",
+            getattr(detalle, "responsable_inst_apellido", "") or "",
+            disabled=(not editando),
+            key=f"resp_inst_ap_{mie_id}",
+        )
+    with colp2b:
+        responsable_inst_nombre = st.text_input(
+            "Responsable de la instalación - Nombre",
+            getattr(detalle, "responsable_inst_nombre", "") or "",
+            disabled=(not editando),
+            key=f"resp_inst_no_{mie_id}",
+        )
+
+    # ----- Ubicación / instalación -----
+    st.markdown("### Ubicación / instalación")
+    colu1, colu2, colu3 = st.columns(3)
+
+    yacimiento_opts = ["", "Las Heras CG", "Canadon Escondida"]
+    yac_val = getattr(detalle, "yacimiento", "") or ""
+    yac_idx = yacimiento_opts.index(yac_val) if yac_val in yacimiento_opts else 0
+
+    with colu1:
+        yacimiento = st.selectbox(
+            "Yacimiento",
+            yacimiento_opts,
+            index=yac_idx,
+            disabled=(not editando),
+            key=f"yacimiento_{mie_id}",
+        )
+    with colu2:
+        zona = st.text_input(
+            "Zona",
+            getattr(detalle, "zona", "") or "",
+            disabled=(not editando),
+            key=f"zona_{mie_id}",
+        )
+    with colu3:
+        nombre_instalacion = st.text_input(
+            "Nombre de la instalación",
+            getattr(detalle, "nombre_instalacion", "") or "",
+            disabled=(not editando),
+            key=f"nombre_inst_{mie_id}",
+        )
+
+    coll1, coll2 = st.columns(2)
+    with coll1:
+        latitud = st.text_input(
+            "Latitud",
+            getattr(detalle, "latitud", "") or "",
+            disabled=(not editando),
+            key=f"lat_{mie_id}",
+        )
+    with coll2:
+        longitud = st.text_input(
+            "Longitud",
+            getattr(detalle, "longitud", "") or "",
+            disabled=(not editando),
+            key=f"lon_{mie_id}",
+        )
+
+    # ----- Características del evento -----
+    st.markdown("### Características del evento")
+    colc1, colc2 = st.columns(2)
+
+    tipo_afectacion_opts = ["", "Derrame", "Aventamiento de gas"]
+    tipo_derrame_opts = ["", "Agua de Produccion", "Petroleo Hidratado", "Gas", "Otro (Detallar en notas)"]
+    tipo_instalacion_opts = ["", "Pozo", "Linea de conduccion", "Ducto", "Tanque", "Separador", "Free-Water", "Planta", "Batería"]
+    causa_inmediata_opts = ["", "Corrosion", "Falla de Material", "Error de operación", "Falla en sistemas de control", "Sabotaje", "Fuerza Mayor"]
+
+    ta_val = getattr(detalle, "tipo_afectacion", "") or ""
+    td_val = getattr(detalle, "tipo_derrame", "") or ""
+    ti_val = getattr(detalle, "tipo_instalacion", "") or ""
+    ci_val = getattr(detalle, "causa_inmediata", "") or ""
+
+    with colc1:
+        tipo_afectacion = st.selectbox(
+            "Tipo de afectación",
+            tipo_afectacion_opts,
+            index=(tipo_afectacion_opts.index(ta_val) if ta_val in tipo_afectacion_opts else 0),
+            disabled=(not editando),
+            key=f"tipo_af_{mie_id}",
+        )
+        tipo_derrame = st.selectbox(
+            "Tipo de derrame",
+            tipo_derrame_opts,
+            index=(tipo_derrame_opts.index(td_val) if td_val in tipo_derrame_opts else 0),
+            disabled=(not editando),
+            key=f"tipo_der_{mie_id}",
+        )
+    with colc2:
+        tipo_instalacion = st.selectbox(
+            "Tipo de instalación",
+            tipo_instalacion_opts,
+            index=(tipo_instalacion_opts.index(ti_val) if ti_val in tipo_instalacion_opts else 0),
+            disabled=(not editando),
+            key=f"tipo_inst_{mie_id}",
+        )
+        causa_inmediata = st.selectbox(
+            "Causa inmediata",
+            causa_inmediata_opts,
+            index=(causa_inmediata_opts.index(ci_val) if ci_val in causa_inmediata_opts else 0),
+            disabled=(not editando),
+            key=f"causa_inm_{mie_id}",
+        )
+
+    # ----- Volúmenes y área afectada -----
+    st.markdown("### Volúmenes y área afectada")
+    colv1, colv2, colv3 = st.columns(3)
+
+    vol_bruto_def = float(getattr(detalle, "volumen_bruto_m3", 0) or 0)
+    vol_gas_def   = float(getattr(detalle, "volumen_gas_m3", 0) or 0)
+    area_def      = float(getattr(detalle, "area_afectada_m2", 0) or 0)
+    ppm_def       = float(getattr(detalle, "ppm_agua", 0) or 0)
+
+    with colv1:
+        volumen_bruto_m3 = st.number_input(
+            "Volumen bruto (m³)",
+            min_value=0.0,
+            step=0.1,
+            value=vol_bruto_def,
+            disabled=(not editando),
+            key=f"vol_bruto_{mie_id}",
+        )
+    with colv2:
+        volumen_gas_m3 = st.number_input(
+            "Volumen de gas (m³)",
+            min_value=0.0,
+            step=1.0,
+            value=vol_gas_def,
+            disabled=(not editando),
+            key=f"vol_gas_{mie_id}",
+        )
+    with colv3:
+        area_afectada_m2 = st.number_input(
+            "Área afectada (m²)",
+            min_value=0.0,
+            step=1.0,
+            value=area_def,
+            disabled=(not editando),
+            key=f"area_{mie_id}",
+        )
+
+    colv4, colv5 = st.columns(2)
+    with colv5:
+        ppm_agua = st.number_input(
+            "% de agua",
+            min_value=0.0,
+            max_value=100.0,
+            step=0.1,
+            value=ppm_def,
+            disabled=(not editando),
+            key=f"ppm_{mie_id}",
+        )
+
+    volumen_crudo_m3 = volumen_bruto_m3 * ((100.0 - ppm_agua) / 100.0)
+
+    with colv4:
+        st.number_input(
+            "Volumen de crudo (m³)",
+            value=float(volumen_crudo_m3),
+            disabled=True,
+            key=f"vol_crudo_{mie_id}",
+        )
+
+    # ----- Recursos afectados -----
+    st.markdown("### Recursos afectados")
+    recursos_afectados = st.text_area(
+        "Recursos afectados",
+        getattr(detalle, "recursos_afectados", "") or "",
+        disabled=(not editando),
+        key=f"recursos_{mie_id}",
+    )
+
+    # ----- Otros datos / notas -----
+    st.markdown("### Otros datos / notas")
+    coln1, coln2 = st.columns(2)
+    with coln1:
+        causa_probable = st.text_input(
+            "Causa probable",
+            getattr(detalle, "causa_probable", "") or "",
+            disabled=(not editando),
+            key=f"causa_prob_{mie_id}",
+        )
+    with coln2:
+        responsable = st.text_input(
+            "Responsable",
+            getattr(detalle, "responsable", "") or "",
+            disabled=(not editando),
+            key=f"responsable_{mie_id}",
+        )
+
+    observaciones = st.text_area(
+        "Notas / Observaciones",
+        getattr(detalle, "observaciones", "") or "",
+        disabled=(not editando),
+        key=f"obs_{mie_id}",
+    )
+
+    medidas_inmediatas = st.text_area(
+        "Medidas inmediatas adoptadas",
+        getattr(detalle, "medidas_inmediatas", "") or "",
+        disabled=(not editando),
+        key=f"medidas_{mie_id}",
+    )
+
+    # ----- Aprobación -----
+    st.markdown("### Aprobación")
+    cola1, cola2 = st.columns(2)
+
+    with cola1:
+        aprobador_apellido = st.text_input(
+            "Aprobador - Apellido",
+            getattr(detalle, "aprobador_apellido", "") or "",
+            disabled=(not editando),
+            key=f"aprob_ap_{mie_id}",
+        )
+        aprobador_nombre = st.text_input(
+            "Aprobador - Nombre",
+            getattr(detalle, "aprobador_nombre", "") or "",
+            disabled=(not editando),
+            key=f"aprob_no_{mie_id}",
+        )
+
+    with cola2:
+        fecha_aprob = st.date_input(
+            "Fecha aprobación",
+            value=fecha_aprob_def,
+            disabled=(not editando),
+            key=f"fecha_aprob_{mie_id}",
+        )
+        hora_aprob = st.selectbox(
+            "Hora aprobación",
+            options=HORAS_OPTS,
+            format_func=lambda t: t.strftime("%H:%M"),
+            index=_nearest_index(HORAS_OPTS, hora_aprob_def),
+            disabled=(not editando),
+            key=f"hora_aprob_{mie_id}",
+        )
+
+    fecha_hora_aprobacion = (
+        datetime.combine(fecha_aprob, hora_aprob)
+        if (aprobador_apellido or aprobador_nombre)
+        else None
+    )
+
+    # -----------------------
+    # Guardar cambios
+    # -----------------------
+    if editando:
+        st.divider()
+        colg1, colg2, colg3 = st.columns([1, 1, 6])
+
+        with colg1:
+            if st.button("💾 Guardar cambios", key=f"btn_save_{mie_id}"):
+                if not nombre_instalacion or not creado_por:
+                    st.error("❌ Nombre de la instalación y Usuario son obligatorios.")
+                else:
+                    try:
+                        actualizar_mie_completo(
+                            mie_id=mie_id,
+                            creado_por=creado_por or None,
+                            fecha_hora_evento=fecha_hora_evento,
+                            observador_apellido=observador_apellido or None,
+                            observador_nombre=observador_nombre or None,
+                            responsable_inst_apellido=responsable_inst_apellido or None,
+                            responsable_inst_nombre=responsable_inst_nombre or None,
+                            yacimiento=yacimiento or None,
+                            zona=zona or None,
+                            nombre_instalacion=nombre_instalacion or None,
+                            latitud=latitud or None,
+                            longitud=longitud or None,
+                            tipo_afectacion=tipo_afectacion or None,
+                            tipo_derrame=tipo_derrame or None,
+                            tipo_instalacion=tipo_instalacion or None,
+                            causa_inmediata=causa_inmediata or None,
+                            volumen_bruto_m3=float(volumen_bruto_m3),
+                            volumen_gas_m3=float(volumen_gas_m3),
+                            ppm_agua=float(ppm_agua),
+                            volumen_crudo_m3=float(volumen_crudo_m3),
+                            area_afectada_m2=float(area_afectada_m2),
+                            recursos_afectados=recursos_afectados or None,
+                            causa_probable=causa_probable or None,
+                            responsable=responsable or None,
+                            observaciones=observaciones or None,
+                            medidas_inmediatas=medidas_inmediatas or None,
+                            aprobador_apellido=aprobador_apellido or None,
+                            aprobador_nombre=aprobador_nombre or None,
+                            fecha_hora_aprobacion=fecha_hora_aprobacion,
+                        )
+                        st.success("✅ Cambios guardados.")
+                        st.session_state["edit_mie_id"] = None
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"❌ Error guardando cambios: {e}")
+
+        with colg2:
+            if st.button("❌ Cancelar edición", key=f"btn_cancel2_{mie_id}"):
+                st.session_state["edit_mie_id"] = None
+                st.rerun()
+
+    # ---------------------------------------------------
+    # FOTOS ANTES / DESPUÉS
+    # ---------------------------------------------------
+    st.subheader("📸 Fotos asociadas")
+
+    fotos_antes = [f for f in fotos if f["tipo"] == "ANTES"]
+    fotos_despues = [f for f in fotos if f["tipo"] == "DESPUES"]
+
+    if fotos_antes:
+        st.markdown("#### Fotos del incidente (ANTES)")
+        for f in fotos_antes:
+            st.markdown(f"**{f['fecha_hora']}**")
+            st.image(f["data"], use_container_width=True)
+
+    if fotos_despues:
+        st.markdown("#### Fotos de remediación (DESPUÉS)")
+        for f in fotos_despues:
+            st.markdown(f"**{f['fecha_hora']}**")
+            st.image(f["data"], use_container_width=True)
+
+    # ---------------------------------------------------
+    # BLOQUE DE REMEDIACIÓN
+    # ---------------------------------------------------
+    if detalle.estado == "CERRADO":
+        st.subheader("✅ Datos de remediación")
+
+        fecha_fin = getattr(detalle, "rem_fecha_fin_saneamiento", None)
+        if not fecha_fin:
+            fecha_fin = getattr(detalle, "rem_fecha", None)
+
+        vol_tierra = getattr(detalle, "rem_volumen_tierra_levantada", None)
+        destino_tierra = getattr(detalle, "rem_destino_tierra_impactada", None)
+        vol_liquido = getattr(detalle, "rem_volumen_liquido_recuperado", None)
+        comentarios = (
+            getattr(detalle, "rem_comentarios", None)
+            or getattr(detalle, "rem_detalle", None)
+        )
+        aprob_ap = getattr(detalle, "rem_aprobador_apellido", "")
+        aprob_no = getattr(detalle, "rem_aprobador_nombre", "")
+
+        st.write(f"**Fecha fin saneamiento:** {fecha_fin or '-'}")
+        st.write(f"**Volumen tierra levantada (m³):** {vol_tierra or '-'}")
+        st.write(f"**Destino tierra impactada:** {destino_tierra or '-'}")
+        st.write(f"**Volumen líquido recuperado (m³):** {vol_liquido or '-'}")
+        st.write("**Comentarios:**")
+        st.write(comentarios or "-")
+        st.write(f"**Aprobador final:** {aprob_ap} {aprob_no}")
+
+        st.success("Este MIA ya está CERRADO.")
+
+        st.subheader("📄 Generar PDF de este MIA")
+
+        try:
+            pdf_bytes_hist = generar_mie_pdf(detalle, fotos)
+        except Exception as e:
+            st.error(f"⚠️ Error generando PDF: {e}")
+        else:
+            nombre_inst = (
+                getattr(detalle, "nombre_instalacion", None)
+                or detalle.pozo
+                or ""
+            ).strip()
+
+            file_name_hist = (
+                f"{detalle.codigo_mie} - {nombre_inst}.pdf"
+                if nombre_inst
+                else f"{detalle.codigo_mie}.pdf"
             )
 
-            if st.button("✔️ Guardar remediación y CERRAR MIA", key=f"btn_cerrar_{mie_id}"):
-                try:
-                    cerrar_mie_con_remediacion(
-                        mie_id,
-                        fecha_fin_dt,
-                        vol_tierra,
-                        destino_tierra,
-                        vol_liquido,
-                        comentarios,
-                        aprob_ap,
-                        aprob_no,
-                    )
+            st.download_button(
+                "📄 Descargar PDF de este MIA",
+                data=pdf_bytes_hist,
+                file_name=file_name_hist,
+                mime="application/pdf",
+            )
 
-                    if fotos_despues:
-                        codigo = detalle.codigo_mie
-                        for archivo in fotos_despues:
-                            nombre_destino = (
-                                f"{codigo}/DESPUES/"
-                                f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{archivo.name}"
-                            )
-                            blob_name = subir_foto_a_bucket(archivo, nombre_destino)
-                            insertar_foto(mie_id, "DESPUES", blob_name)
+    else:
+        st.subheader("🛠️ Cargar datos de remediación y CERRAR MIA")
 
-                    st.success("MIA cerrado exitosamente.")
-                    st.rerun()
+        colr1, colr2 = st.columns(2)
+        with colr1:
+            fecha_fin = st.date_input(
+                "Fecha finalización saneamiento",
+                datetime.now().date(),
+                key=f"rem_fecha_{mie_id}",
+            )
+        with colr2:
+            ahora = datetime.now().time().replace(microsecond=0)
+            hora_fin = st.selectbox(
+                "Hora finalización",
+                options=HORAS_OPTS,
+                format_func=lambda t: t.strftime("%H:%M"),
+                index=_nearest_index(HORAS_OPTS, ahora),
+                key=f"rem_hora_{mie_id}",
+            )
 
-                except Exception as e:
-                    st.error(f"❌ Error al cerrar MIA: {e}")
+        fecha_fin_dt = datetime.combine(fecha_fin, hora_fin)
+
+        colv1r, colv2r = st.columns(2)
+        with colv1r:
+            vol_tierra = st.number_input(
+                "Volumen tierra levantada (m³)",
+                min_value=0.0,
+                step=0.1,
+                key=f"vol_tierra_{mie_id}",
+            )
+        with colv2r:
+            vol_liquido = st.number_input(
+                "Volumen líquido recuperado (m³)",
+                min_value=0.0,
+                step=0.1,
+                key=f"vol_liq_{mie_id}",
+            )
+
+        destino_tierra = st.text_input("Destino tierra impactada", key=f"destino_{mie_id}")
+        comentarios = st.text_area("Comentarios de remediación", key=f"coment_{mie_id}")
+
+        colap1, colap2 = st.columns(2)
+        with colap1:
+            aprob_ap = st.text_input("Aprobador final - Apellido", key=f"ap_ap_{mie_id}")
+        with colap2:
+            aprob_no = st.text_input("Aprobador final - Nombre", key=f"ap_no_{mie_id}")
+
+        st.markdown("### 📸 Fotos DESPUÉS del Saneamiento")
+        fotos_despues = st.file_uploader(
+            "Subir fotos",
+            type=["jpg", "jpeg", "png"],
+            accept_multiple_files=True,
+            key=f"fotos_desp_{mie_id}",
+        )
+
+        if st.button("✔️ Guardar remediación y CERRAR MIA", key=f"btn_cerrar_{mie_id}"):
+            try:
+                cerrar_mie_con_remediacion(
+                    mie_id,
+                    fecha_fin_dt,
+                    vol_tierra,
+                    destino_tierra,
+                    vol_liquido,
+                    comentarios,
+                    aprob_ap,
+                    aprob_no,
+                )
+
+                if fotos_despues:
+                    codigo = detalle.codigo_mie
+                    for archivo in fotos_despues:
+                        nombre_destino = (
+                            f"{codigo}/DESPUES/"
+                            f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{archivo.name}"
+                        )
+                        blob_name = subir_foto_a_bucket(archivo, nombre_destino)
+                        insertar_foto(mie_id, "DESPUES", blob_name)
+
+                st.success("MIA cerrado exitosamente.")
+                st.rerun()
+
+            except Exception as e:
+                st.error(f"❌ Error al cerrar MIA: {e}")
 
 # =======================================================
 #  MODO 2.5 - ESTADISTICAS
 # =======================================================
 elif modo == "Estadísticas":
     st.header("Estadísticas de MIA")
-
-    from mie_backend import obtener_todos_mie
-    import pandas as pd
 
     registros = obtener_todos_mie()
     if not registros:
@@ -839,20 +1150,16 @@ elif modo == "Estadísticas":
         estados = sorted(df["estado"].dropna().unique()) if "estado" in df.columns else []
 
     col_ff3, col_ff4, col_ff5 = st.columns(3)
-
     with col_ff3:
         yac_sel = st.selectbox("Yacimiento", ["(Todos)"] + yacimientos)
-
     with col_ff4:
         zona_sel = st.selectbox("Zona", ["(Todos)"] + zonas)
-
     with col_ff5:
         tipo_inst_sel = st.selectbox("Tipo de instalación", ["(Todos)"] + tipos_inst)
 
     estado_sel = st.selectbox("Estado del MIA", ["(Todos)"] + estados)
 
     df_filt = df.copy()
-
     df_filt = df_filt[
         (df_filt["fecha_hora_evento"].dt.date >= fecha_desde) &
         (df_filt["fecha_hora_evento"].dt.date <= fecha_hasta)
@@ -860,13 +1167,10 @@ elif modo == "Estadísticas":
 
     if yac_sel != "(Todos)":
         df_filt = df_filt[df_filt["yacimiento"] == yac_sel]
-
     if zona_sel != "(Todos)":
         df_filt = df_filt[df_filt["zona"] == zona_sel]
-
     if tipo_inst_sel != "(Todos)":
         df_filt = df_filt[df_filt["tipo_instalacion"] == tipo_inst_sel]
-
     if estado_sel != "(Todos)":
         df_filt = df_filt[df_filt["estado"] == estado_sel]
 
@@ -925,6 +1229,7 @@ elif modo == "Estadísticas":
 
     st.divider()
 
+    import plotly.graph_objects as go
     import plotly.express as px
 
     st.subheader("Evolución de MIA por mes")
@@ -933,18 +1238,12 @@ elif modo == "Estadísticas":
         df_tmp = df_filt.copy()
         df_tmp["mes"] = df_tmp["fecha_hora_evento"].dt.to_period("M").dt.to_timestamp()
 
-        df_mes_total = (
-            df_tmp.groupby("mes").size().reset_index(name="total_mia").sort_values("mes")
-        )
+        df_mes_total = df_tmp.groupby("mes").size().reset_index(name="total_mia").sort_values("mes")
 
-        if "estado" in df_tmp.columns:
-            df_cerr_tmp = df_tmp[df_tmp["estado"] == "CERRADO"].copy()
-            if not df_cerr_tmp.empty:
-                df_cerr_tmp["mes"] = df_cerr_tmp["fecha_hora_evento"].dt.to_period("M").dt.to_timestamp()
-                df_mes_cerr = df_cerr_tmp.groupby("mes").size().reset_index(name="cerrados_mia")
-            else:
-                df_mes_cerr = df_mes_total[["mes"]].copy()
-                df_mes_cerr["cerrados_mia"] = 0
+        df_cerr_tmp = df_tmp[df_tmp["estado"] == "CERRADO"].copy()
+        if not df_cerr_tmp.empty:
+            df_cerr_tmp["mes"] = df_cerr_tmp["fecha_hora_evento"].dt.to_period("M").dt.to_timestamp()
+            df_mes_cerr = df_cerr_tmp.groupby("mes").size().reset_index(name="cerrados_mia")
         else:
             df_mes_cerr = df_mes_total[["mes"]].copy()
             df_mes_cerr["cerrados_mia"] = 0
@@ -980,11 +1279,9 @@ elif modo == "Estadísticas":
     if "yacimiento" in df_filt.columns:
         df_yac = df_filt.groupby("yacimiento").size().reset_index(name="cantidad").sort_values("cantidad", ascending=False)
         if not df_yac.empty:
-            fig_yac = px.bar(
-                df_yac, x="cantidad", y="yacimiento", orientation="h",
-                title="MIA por Yacimiento",
-                labels={"cantidad": "Cantidad de MIA", "yacimiento": "Yacimiento"},
-            )
+            fig_yac = px.bar(df_yac, x="cantidad", y="yacimiento", orientation="h",
+                             title="MIA por Yacimiento",
+                             labels={"cantidad": "Cantidad de MIA", "yacimiento": "Yacimiento"})
             fig_yac.update_layout(template="plotly_white", margin=dict(l=40, r=20, t=60, b=40))
             st.plotly_chart(fig_yac, use_container_width=True)
         else:
@@ -996,11 +1293,9 @@ elif modo == "Estadísticas":
     if "tipo_instalacion" in df_filt.columns:
         df_inst = df_filt.groupby("tipo_instalacion").size().reset_index(name="cantidad").sort_values("cantidad", ascending=False)
         if not df_inst.empty:
-            fig_inst = px.bar(
-                df_inst, x="tipo_instalacion", y="cantidad",
-                title="MIA por Tipo de Instalación",
-                labels={"cantidad": "Cantidad de MIA", "tipo_instalacion": "Tipo de Instalación"},
-            )
+            fig_inst = px.bar(df_inst, x="tipo_instalacion", y="cantidad",
+                              title="MIA por Tipo de Instalación",
+                              labels={"cantidad": "Cantidad de MIA", "tipo_instalacion": "Tipo de Instalación"})
             fig_inst.update_layout(template="plotly_white", xaxis_tickangle=-30, margin=dict(l=40, r=20, t=60, b=80))
             st.plotly_chart(fig_inst, use_container_width=True)
         else:
@@ -1012,11 +1307,9 @@ elif modo == "Estadísticas":
     if "causa_inmediata" in df_filt.columns:
         df_causa = df_filt.groupby("causa_inmediata").size().reset_index(name="cantidad").sort_values("cantidad", ascending=False)
         if not df_causa.empty:
-            fig_causa = px.bar(
-                df_causa, x="causa_inmediata", y="cantidad",
-                title="MIA por Causa Inmediata",
-                labels={"cantidad": "Cantidad de MIA", "causa_inmediata": "Causa Inmediata"},
-            )
+            fig_causa = px.bar(df_causa, x="causa_inmediata", y="cantidad",
+                               title="MIA por Causa Inmediata",
+                               labels={"cantidad": "Cantidad de MIA", "causa_inmediata": "Causa Inmediata"})
             fig_causa.update_layout(template="plotly_white", xaxis_tickangle=-30, margin=dict(l=40, r=20, t=60, b=80))
             st.plotly_chart(fig_causa, use_container_width=True)
         else:
@@ -1028,11 +1321,9 @@ elif modo == "Estadísticas":
     if "tipo_afectacion" in df_filt.columns:
         df_afec = df_filt.groupby("tipo_afectacion").size().reset_index(name="cantidad").sort_values("cantidad", ascending=False)
         if not df_afec.empty:
-            fig_afec = px.bar(
-                df_afec, x="tipo_afectacion", y="cantidad",
-                title="MIA por Tipo de Afectación",
-                labels={"cantidad": "Cantidad de MIA", "tipo_afectacion": "Tipo de Afectación"},
-            )
+            fig_afec = px.bar(df_afec, x="tipo_afectacion", y="cantidad",
+                              title="MIA por Tipo de Afectación",
+                              labels={"cantidad": "Cantidad de MIA", "tipo_afectacion": "Tipo de Afectación"})
             fig_afec.update_layout(template="plotly_white", xaxis_tickangle=-30, margin=dict(l=40, r=20, t=60, b=80))
             st.plotly_chart(fig_afec, use_container_width=True)
         else:
@@ -1044,11 +1335,9 @@ elif modo == "Estadísticas":
     if "tipo_derrame" in df_filt.columns:
         df_der = df_filt.groupby("tipo_derrame").size().reset_index(name="cantidad").sort_values("cantidad", ascending=False)
         if not df_der.empty:
-            fig_der = px.bar(
-                df_der, x="tipo_derrame", y="cantidad",
-                title="MIA por Tipo de Derrame",
-                labels={"cantidad": "Cantidad de MIA", "tipo_derrame": "Tipo de Derrame"},
-            )
+            fig_der = px.bar(df_der, x="tipo_derrame", y="cantidad",
+                             title="MIA por Tipo de Derrame",
+                             labels={"cantidad": "Cantidad de MIA", "tipo_derrame": "Tipo de Derrame"})
             fig_der.update_layout(template="plotly_white", xaxis_tickangle=-30, margin=dict(l=40, r=20, t=60, b=80))
             st.plotly_chart(fig_der, use_container_width=True)
         else:
@@ -1069,11 +1358,6 @@ elif modo == "Exportar MIA":
 
     if st.button("Generar archivo Excel"):
         try:
-            from io import BytesIO
-            import pandas as pd
-            from datetime import datetime
-            from mie_backend import obtener_todos_mie
-
             registros = obtener_todos_mie()
 
             if not registros:
@@ -1103,6 +1387,7 @@ elif modo == "Exportar MIA":
 
         except Exception as e:
             st.error(f"❌ Error al generar la exportación: {e}")
+
 
 
 
