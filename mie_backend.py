@@ -1,9 +1,10 @@
 # ============================================================
-# mie_backend.py — versión corregida y unificada
+# mie_backend.py — versión corregida y unificada (MIA / MIE)
 # ============================================================
 
 from datetime import datetime
 from io import BytesIO
+
 from google.cloud import bigquery, storage
 from config import PROJECT_ID, DATASET_ID, BUCKET_NAME
 
@@ -16,6 +17,8 @@ storage_client = storage.Client(project=PROJECT_ID)
 
 # ---------------------------------------------------------
 # 1) Obtener siguiente ID incremental
+#    (OJO: si tenés alta concurrencia, esto puede colisionar;
+#     para tu caso “interno” suele andar bien.)
 # ---------------------------------------------------------
 def obtener_siguiente_id(tabla: str, campo: str) -> int:
     query = f"""
@@ -25,32 +28,46 @@ def obtener_siguiente_id(tabla: str, campo: str) -> int:
     rows = list(bq_client.query(query).result())
     if not rows or rows[0].max_id is None:
         return 1
-    return rows[0].max_id + 1
+    return int(rows[0].max_id) + 1
 
 
 # ---------------------------------------------------------
 # 2) Generar código tipo MIE-2025-0001
 # ---------------------------------------------------------
 def generar_codigo_mie(num: int) -> str:
-    year = datetime.now().year
+    year = datetime.utcnow().year
     return f"MIE-{year}-{num:04d}"
 
 
 # ---------------------------------------------------------
-# 3) Subir imagen al bucket
+# 3) Subir imagen al bucket (devuelve blob_name)
 # ---------------------------------------------------------
 def subir_foto_a_bucket(file_obj, nombre_destino: str) -> str:
+    """
+    file_obj: streamlit.UploadedFile
+    nombre_destino: path dentro del bucket (ej: 'MIE-2025-0001/ANTES/xxx.jpg')
+    """
     bucket = storage_client.bucket(BUCKET_NAME)
     blob = bucket.blob(nombre_destino)
 
-    data = file_obj.read()
-    blob.upload_from_file(BytesIO(data), content_type=file_obj.type)
+    # Streamlit UploadedFile se consume con read(); nos aseguramos de arrancar al inicio
+    if hasattr(file_obj, "seek"):
+        try:
+            file_obj.seek(0)
+        except Exception:
+            pass
 
-    return nombre_destino   # path interno del bucket
+    data = file_obj.read()
+    content_type = getattr(file_obj, "type", None) or "application/octet-stream"
+
+    # Upload robusto (evita líos de punteros/streams)
+    blob.upload_from_string(data, content_type=content_type)
+
+    return nombre_destino
 
 
 # ---------------------------------------------------------
-# 4) Insertar nuevo MIE
+# 4) Insertar nuevo MIA/MIE
 # ---------------------------------------------------------
 def insertar_mie(
     drm,
@@ -64,7 +81,7 @@ def insertar_mie(
     creado_por,
     fecha_hora_evento=None,
 
-    # ---- campos nuevos IADE ----
+    # ---- campos IADE/MIA ----
     observador_apellido=None,
     observador_nombre=None,
     responsable_inst_apellido=None,
@@ -80,7 +97,7 @@ def insertar_mie(
     causa_inmediata=None,
     volumen_bruto_m3=None,
     volumen_gas_m3=None,
-    ppm_agua=None,
+    ppm_agua=None,              # tu esquema actual: STRING (si lo cambiás a FLOAT64, ajustamos acá)
     volumen_crudo_m3=None,
     area_afectada_m2=None,
     recursos_afectados=None,
@@ -109,13 +126,12 @@ def insertar_mie(
     mie_id = obtener_siguiente_id("mie_eventos", "mie_id")
     codigo = generar_codigo_mie(mie_id)
 
-    if not drm:
-        drm = codigo
+    # Si no mandan drm, lo igualamos al código
+    drm = drm or codigo
 
     ahora = datetime.utcnow()
     fecha_evento = fecha_hora_evento or ahora
 
-    # ---- Insert ----
     query = f"""
         INSERT INTO `{tabla}` (
             mie_id, codigo_mie, drm, pozo, locacion, fluido,
@@ -160,67 +176,78 @@ def insertar_mie(
     """
 
     params = [
-        ("mie_id", "INT64", mie_id),
-        ("codigo_mie", "STRING", codigo),
-        ("drm", "STRING", drm),
-        ("pozo", "STRING", pozo),
-        ("locacion", "STRING", locacion),
-        ("fluido", "STRING", fluido),
-        ("vol_est", "FLOAT64", float(volumen_estimado_m3) if volumen_estimado_m3 else None),
-        ("causa_prob", "STRING", causa_probable),
-        ("responsable", "STRING", responsable),
-        ("observ", "STRING", observaciones),
-        ("creado_por", "STRING", creado_por),
-        ("fecha_evento", "TIMESTAMP", fecha_evento.isoformat()),
-        ("fecha_creacion", "TIMESTAMP", ahora.isoformat()),
+        bigquery.ScalarQueryParameter("mie_id", "INT64", mie_id),
+        bigquery.ScalarQueryParameter("codigo_mie", "STRING", codigo),
+        bigquery.ScalarQueryParameter("drm", "STRING", drm),
+        bigquery.ScalarQueryParameter("pozo", "STRING", pozo),
+        bigquery.ScalarQueryParameter("locacion", "STRING", locacion),
+        bigquery.ScalarQueryParameter("fluido", "STRING", fluido),
 
-        ("obs_apellido", "STRING", observador_apellido),
-        ("obs_nombre", "STRING", observador_nombre),
-        ("res_inst_ape", "STRING", responsable_inst_apellido),
-        ("res_inst_nom", "STRING", responsable_inst_nombre),
-        ("yacimiento", "STRING", yacimiento),
-        ("zona", "STRING", zona),
-        ("nombre_inst", "STRING", nombre_instalacion),
-        ("latitud", "STRING", latitud),
-        ("longitud", "STRING", longitud),
-        ("tipo_afectacion", "STRING", tipo_afectacion),
-        ("tipo_derrame", "STRING", tipo_derrame),
-        ("tipo_inst", "STRING", tipo_instalacion),
-        ("causa_inm", "STRING", causa_inmediata),
-        ("vol_bruto", "FLOAT64", volumen_bruto_m3),
-        ("vol_gas", "FLOAT64", volumen_gas_m3),
-        ("ppm_agua", "STRING", str(ppm_agua) if ppm_agua is not None else None),
-        ("vol_crudo", "FLOAT64", volumen_crudo_m3),
-        ("area_af", "FLOAT64", area_afectada_m2),
-        ("rec_af", "STRING", recursos_afectados),
-        ("magnitud", "STRING", magnitud),
-        ("av_sen", "STRING", aviso_sen),
-        ("dif_med", "STRING", difusion_mediatica),
-        ("av_aut", "STRING", aviso_autoridad),
-        ("av_aut_fh", "TIMESTAMP", aviso_autoridad_fecha_hora.isoformat() if aviso_autoridad_fecha_hora else None),
-        ("av_aut_emi", "STRING", aviso_autoridad_emisor),
-        ("av_aut_medio", "STRING", aviso_autoridad_medio),
-        ("av_aut_org", "STRING", aviso_autoridad_organismo),
-        ("av_aut_cont", "STRING", aviso_autoridad_contacto),
-        ("av_sup", "STRING", aviso_superficiario),
-        ("av_sup_fh", "TIMESTAMP", aviso_superficiario_fecha_hora.isoformat() if aviso_superficiario_fecha_hora else None),
-        ("av_sup_emi", "STRING", aviso_superficiario_emisor),
-        ("av_sup_medio", "STRING", aviso_superficiario_medio),
-        ("av_sup_org", "STRING", aviso_superficiario_organismo),
-        ("av_sup_cont", "STRING", aviso_superficiario_contacto),
-        ("med_inm", "STRING", medidas_inmediatas),
-        ("ap_apellido", "STRING", aprobador_apellido),
-        ("ap_nombre", "STRING", aprobador_nombre),
-        ("ap_fh", "TIMESTAMP", fecha_hora_aprobacion.isoformat() if fecha_hora_aprobacion else None),
+        bigquery.ScalarQueryParameter("vol_est", "FLOAT64", float(volumen_estimado_m3) if volumen_estimado_m3 is not None else None),
+        bigquery.ScalarQueryParameter("causa_prob", "STRING", causa_probable),
+        bigquery.ScalarQueryParameter("responsable", "STRING", responsable),
+        bigquery.ScalarQueryParameter("observ", "STRING", observaciones),
+        bigquery.ScalarQueryParameter("creado_por", "STRING", creado_por),
+
+        # TIMESTAMP: pasamos datetime (más seguro que iso-string)
+        bigquery.ScalarQueryParameter("fecha_evento", "TIMESTAMP", fecha_evento),
+        bigquery.ScalarQueryParameter("fecha_creacion", "TIMESTAMP", ahora),
+
+        bigquery.ScalarQueryParameter("obs_apellido", "STRING", observador_apellido),
+        bigquery.ScalarQueryParameter("obs_nombre", "STRING", observador_nombre),
+        bigquery.ScalarQueryParameter("res_inst_ape", "STRING", responsable_inst_apellido),
+        bigquery.ScalarQueryParameter("res_inst_nom", "STRING", responsable_inst_nombre),
+
+        bigquery.ScalarQueryParameter("yacimiento", "STRING", yacimiento),
+        bigquery.ScalarQueryParameter("zona", "STRING", zona),
+        bigquery.ScalarQueryParameter("nombre_inst", "STRING", nombre_instalacion),
+
+        bigquery.ScalarQueryParameter("latitud", "STRING", latitud),
+        bigquery.ScalarQueryParameter("longitud", "STRING", longitud),
+
+        bigquery.ScalarQueryParameter("tipo_afectacion", "STRING", tipo_afectacion),
+        bigquery.ScalarQueryParameter("tipo_derrame", "STRING", tipo_derrame),
+        bigquery.ScalarQueryParameter("tipo_inst", "STRING", tipo_instalacion),
+        bigquery.ScalarQueryParameter("causa_inm", "STRING", causa_inmediata),
+
+        bigquery.ScalarQueryParameter("vol_bruto", "FLOAT64", float(volumen_bruto_m3) if volumen_bruto_m3 is not None else None),
+        bigquery.ScalarQueryParameter("vol_gas", "FLOAT64", float(volumen_gas_m3) if volumen_gas_m3 is not None else None),
+
+        # Tu esquema actual guarda ppm_agua como STRING:
+        bigquery.ScalarQueryParameter("ppm_agua", "STRING", str(ppm_agua) if ppm_agua is not None else None),
+
+        bigquery.ScalarQueryParameter("vol_crudo", "FLOAT64", float(volumen_crudo_m3) if volumen_crudo_m3 is not None else None),
+        bigquery.ScalarQueryParameter("area_af", "FLOAT64", float(area_afectada_m2) if area_afectada_m2 is not None else None),
+        bigquery.ScalarQueryParameter("rec_af", "STRING", recursos_afectados),
+
+        bigquery.ScalarQueryParameter("magnitud", "STRING", magnitud),
+        bigquery.ScalarQueryParameter("av_sen", "STRING", aviso_sen),
+        bigquery.ScalarQueryParameter("dif_med", "STRING", difusion_mediatica),
+        bigquery.ScalarQueryParameter("av_aut", "STRING", aviso_autoridad),
+
+        bigquery.ScalarQueryParameter("av_aut_fh", "TIMESTAMP", aviso_autoridad_fecha_hora),
+        bigquery.ScalarQueryParameter("av_aut_emi", "STRING", aviso_autoridad_emisor),
+        bigquery.ScalarQueryParameter("av_aut_medio", "STRING", aviso_autoridad_medio),
+        bigquery.ScalarQueryParameter("av_aut_org", "STRING", aviso_autoridad_organismo),
+        bigquery.ScalarQueryParameter("av_aut_cont", "STRING", aviso_autoridad_contacto),
+
+        bigquery.ScalarQueryParameter("av_sup", "STRING", aviso_superficiario),
+        bigquery.ScalarQueryParameter("av_sup_fh", "TIMESTAMP", aviso_superficiario_fecha_hora),
+        bigquery.ScalarQueryParameter("av_sup_emi", "STRING", aviso_superficiario_emisor),
+        bigquery.ScalarQueryParameter("av_sup_medio", "STRING", aviso_superficiario_medio),
+        bigquery.ScalarQueryParameter("av_sup_org", "STRING", aviso_superficiario_organismo),
+        bigquery.ScalarQueryParameter("av_sup_cont", "STRING", aviso_superficiario_contacto),
+
+        bigquery.ScalarQueryParameter("med_inm", "STRING", medidas_inmediatas),
+
+        bigquery.ScalarQueryParameter("ap_apellido", "STRING", aprobador_apellido),
+        bigquery.ScalarQueryParameter("ap_nombre", "STRING", aprobador_nombre),
+        bigquery.ScalarQueryParameter("ap_fh", "TIMESTAMP", fecha_hora_aprobacion),
     ]
 
-    job_config = bigquery.QueryJobConfig(
-        query_parameters=[
-            bigquery.ScalarQueryParameter(n, t, v) for (n, t, v) in params
-        ]
-    )
-
+    job_config = bigquery.QueryJobConfig(query_parameters=params)
     bq_client.query(query, job_config=job_config).result()
+
     return mie_id, codigo
 
 
@@ -237,7 +264,7 @@ def insertar_foto(mie_id: int, tipo: str, blob_name: str):
         "mie_id": mie_id,
         "tipo": tipo,
         "url_foto": blob_name,
-        "fecha_hora": ahora.isoformat(),
+        "fecha_hora": ahora.isoformat(),  # si tu campo es TIMESTAMP, también puede ir `ahora`
     }]
 
     errors = bq_client.insert_rows_json(tabla, row)
@@ -246,12 +273,17 @@ def insertar_foto(mie_id: int, tipo: str, blob_name: str):
 
 
 # ---------------------------------------------------------
-# 6) Listar IADE (historial)
+# 6) Listar MIA (historial)
 # ---------------------------------------------------------
 def listar_mie():
     query = f"""
-        SELECT mie_id, codigo_mie, pozo, nombre_instalacion,
-               estado, fecha_creacion_registro
+        SELECT
+            mie_id,
+            codigo_mie,
+            pozo,
+            nombre_instalacion,
+            estado,
+            fecha_creacion_registro
         FROM `{PROJECT_ID}.{DATASET_ID}.mie_eventos`
         ORDER BY fecha_creacion_registro DESC
         LIMIT 300
@@ -260,22 +292,24 @@ def listar_mie():
 
 
 # ---------------------------------------------------------
-# 7) Detalle de un IADE
+# 7) Detalle de un MIA
 # ---------------------------------------------------------
 def obtener_mie_detalle(mie_id: int):
     query = f"""
-        SELECT * FROM `{PROJECT_ID}.{DATASET_ID}.mie_eventos`
+        SELECT *
+        FROM `{PROJECT_ID}.{DATASET_ID}.mie_eventos`
         WHERE mie_id = @mie_id
+        LIMIT 1
     """
     cfg = bigquery.QueryJobConfig(
         query_parameters=[bigquery.ScalarQueryParameter("mie_id", "INT64", mie_id)]
     )
-    rows = list(bq_client.query(query, cfg).result())
+    rows = list(bq_client.query(query, job_config=cfg).result())
     return rows[0] if rows else None
 
 
 # ---------------------------------------------------------
-# 8) Fotos (bytes)
+# 8) Fotos (bytes) desde GCS
 # ---------------------------------------------------------
 def obtener_fotos_mie(mie_id: int):
     query = f"""
@@ -287,7 +321,8 @@ def obtener_fotos_mie(mie_id: int):
     cfg = bigquery.QueryJobConfig(
         query_parameters=[bigquery.ScalarQueryParameter("id", "INT64", mie_id)]
     )
-    rows = bq_client.query(query, cfg).result()
+
+    rows = bq_client.query(query, job_config=cfg).result()
 
     bucket = storage_client.bucket(BUCKET_NAME)
     fotos = []
@@ -295,9 +330,12 @@ def obtener_fotos_mie(mie_id: int):
     for r in rows:
         if not r.url_foto:
             continue
-
-        blob = bucket.blob(r.url_foto)
-        data = blob.download_as_bytes()
+        try:
+            blob = bucket.blob(r.url_foto)
+            data = blob.download_as_bytes()
+        except Exception:
+            # si una foto falta en el bucket, no rompemos toda la vista
+            continue
 
         fotos.append({
             "tipo": r.tipo,
@@ -309,7 +347,7 @@ def obtener_fotos_mie(mie_id: int):
 
 
 # ---------------------------------------------------------
-# 9) Actualizar datos básicos
+# 9) Actualizar datos “básicos” (si lo seguís usando)
 # ---------------------------------------------------------
 def actualizar_mie_basico(
     mie_id, drm, pozo, locacion, fluido,
@@ -319,9 +357,14 @@ def actualizar_mie_basico(
     query = f"""
         UPDATE `{PROJECT_ID}.{DATASET_ID}.mie_eventos`
         SET
-            drm=@drm, pozo=@pozo, locacion=@locacion, fluido=@fluido,
+            drm=@drm,
+            pozo=@pozo,
+            locacion=@locacion,
+            fluido=@fluido,
             volumen_estimado_m3=@vol,
-            causa_probable=@causa, responsable=@resp, observaciones=@obs
+            causa_probable=@causa,
+            responsable=@resp,
+            observaciones=@obs
         WHERE mie_id=@id
     """
 
@@ -331,10 +374,7 @@ def actualizar_mie_basico(
             bigquery.ScalarQueryParameter("pozo", "STRING", pozo),
             bigquery.ScalarQueryParameter("locacion", "STRING", locacion),
             bigquery.ScalarQueryParameter("fluido", "STRING", fluido),
-            bigquery.ScalarQueryParameter(
-                "vol", "FLOAT64",
-                float(volumen_estimado_m3) if volumen_estimado_m3 else None
-            ),
+            bigquery.ScalarQueryParameter("vol", "FLOAT64", float(volumen_estimado_m3) if volumen_estimado_m3 is not None else None),
             bigquery.ScalarQueryParameter("causa", "STRING", causa_probable),
             bigquery.ScalarQueryParameter("resp", "STRING", responsable),
             bigquery.ScalarQueryParameter("obs", "STRING", observaciones),
@@ -342,11 +382,11 @@ def actualizar_mie_basico(
         ]
     )
 
-    bq_client.query(query, cfg).result()
+    bq_client.query(query, job_config=cfg).result()
 
 
 # ---------------------------------------------------------
-# 9.5) Actualizar MIA completo (para el botón "Editar")
+# 9.5) Actualizar MIA completo (para botón "Editar")
 # ---------------------------------------------------------
 def actualizar_mie_completo(
     mie_id: int,
@@ -371,7 +411,7 @@ def actualizar_mie_completo(
 
     volumen_bruto_m3=None,
     volumen_gas_m3=None,
-    ppm_agua=None,
+    ppm_agua=None,  # STRING en tu esquema actual
     volumen_crudo_m3=None,
     area_afectada_m2=None,
 
@@ -389,8 +429,9 @@ def actualizar_mie_completo(
     Actualiza campos editables del MIA sin tocar:
     - mie_id / codigo_mie / drm
     - estado / fecha_creacion_registro
-    - remediación
+    - remediación (salvo que vos la cierres desde otra función)
     """
+
     query = f"""
         UPDATE `{PROJECT_ID}.{DATASET_ID}.mie_eventos`
         SET
@@ -435,10 +476,7 @@ def actualizar_mie_completo(
     cfg = bigquery.QueryJobConfig(
         query_parameters=[
             bigquery.ScalarQueryParameter("creado_por", "STRING", creado_por),
-            bigquery.ScalarQueryParameter(
-                "fecha_hora_evento", "TIMESTAMP",
-                fecha_hora_evento.isoformat() if fecha_hora_evento else None
-            ),
+            bigquery.ScalarQueryParameter("fecha_hora_evento", "TIMESTAMP", fecha_hora_evento),
 
             bigquery.ScalarQueryParameter("obs_apellido", "STRING", observador_apellido),
             bigquery.ScalarQueryParameter("obs_nombre", "STRING", observador_nombre),
@@ -458,8 +496,10 @@ def actualizar_mie_completo(
 
             bigquery.ScalarQueryParameter("vol_bruto", "FLOAT64", float(volumen_bruto_m3) if volumen_bruto_m3 is not None else None),
             bigquery.ScalarQueryParameter("vol_gas", "FLOAT64", float(volumen_gas_m3) if volumen_gas_m3 is not None else None),
+
             # Tu esquema actual guarda ppm_agua como STRING:
             bigquery.ScalarQueryParameter("ppm_agua", "STRING", str(ppm_agua) if ppm_agua is not None else None),
+
             bigquery.ScalarQueryParameter("vol_crudo", "FLOAT64", float(volumen_crudo_m3) if volumen_crudo_m3 is not None else None),
             bigquery.ScalarQueryParameter("area_afectada_m2", "FLOAT64", float(area_afectada_m2) if area_afectada_m2 is not None else None),
 
@@ -471,20 +511,17 @@ def actualizar_mie_completo(
 
             bigquery.ScalarQueryParameter("aprob_apellido", "STRING", aprobador_apellido),
             bigquery.ScalarQueryParameter("aprob_nombre", "STRING", aprobador_nombre),
-            bigquery.ScalarQueryParameter(
-                "fh_aprob", "TIMESTAMP",
-                fecha_hora_aprobacion.isoformat() if fecha_hora_aprobacion else None
-            ),
+            bigquery.ScalarQueryParameter("fh_aprob", "TIMESTAMP", fecha_hora_aprobacion),
 
             bigquery.ScalarQueryParameter("id", "INT64", mie_id),
         ]
     )
 
-    bq_client.query(query, cfg).result()
+    bq_client.query(query, job_config=cfg).result()
 
 
 # ---------------------------------------------------------
-# 10) Cerrar IADE con remediación
+# 10) Cerrar MIA con remediación
 # ---------------------------------------------------------
 def cerrar_mie_con_remediacion(
     mie_id,
@@ -496,7 +533,6 @@ def cerrar_mie_con_remediacion(
     aprob_apellido,
     aprob_nombre,
 ):
-
     query = f"""
         UPDATE `{PROJECT_ID}.{DATASET_ID}.mie_eventos`
         SET
@@ -511,9 +547,7 @@ def cerrar_mie_con_remediacion(
 
             -- Campos antiguos (compatibilidad)
             rem_fecha = @fh,
-            rem_responsable = CONCAT(
-                COALESCE(@ap_ape, ''), " ", COALESCE(@ap_nom, '')
-            ),
+            rem_responsable = CONCAT(COALESCE(@ap_ape, ''), " ", COALESCE(@ap_nom, '')),
             rem_detalle = @coment
 
         WHERE mie_id = @id
@@ -521,12 +555,10 @@ def cerrar_mie_con_remediacion(
 
     cfg = bigquery.QueryJobConfig(
         query_parameters=[
-            bigquery.ScalarQueryParameter("fh", "TIMESTAMP", fecha_fin_saneamiento.isoformat()),
-            bigquery.ScalarQueryParameter("vol_tierra", "FLOAT64",
-                float(volumen_tierra_levantada) if volumen_tierra_levantada else None),
+            bigquery.ScalarQueryParameter("fh", "TIMESTAMP", fecha_fin_saneamiento),
+            bigquery.ScalarQueryParameter("vol_tierra", "FLOAT64", float(volumen_tierra_levantada) if volumen_tierra_levantada is not None else None),
             bigquery.ScalarQueryParameter("destino", "STRING", destino_tierra_impactada),
-            bigquery.ScalarQueryParameter("vol_liq", "FLOAT64",
-                float(volumen_liquido_recuperado) if volumen_liquido_recuperado else None),
+            bigquery.ScalarQueryParameter("vol_liq", "FLOAT64", float(volumen_liquido_recuperado) if volumen_liquido_recuperado is not None else None),
             bigquery.ScalarQueryParameter("coment", "STRING", comentarios),
             bigquery.ScalarQueryParameter("ap_ape", "STRING", aprob_apellido),
             bigquery.ScalarQueryParameter("ap_nom", "STRING", aprob_nombre),
@@ -534,11 +566,11 @@ def cerrar_mie_con_remediacion(
         ]
     )
 
-    bq_client.query(query, cfg).result()
+    bq_client.query(query, job_config=cfg).result()
 
 
 # ---------------------------------------------------------
-# 11) Obtener todos los IADE (para exportar a Excel)
+# 11) Obtener todos los MIA (para exportar a Excel / stats)
 # ---------------------------------------------------------
 def obtener_todos_mie():
     query = f"""
@@ -547,13 +579,3 @@ def obtener_todos_mie():
         ORDER BY fecha_creacion_registro
     """
     return list(bq_client.query(query).result())
-
-
-
-
-
-
-
-
-
-
