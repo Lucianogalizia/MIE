@@ -78,7 +78,6 @@ APROBADORES = [
 ]
 
 # Mapa apellido -> nombre para autocompletar
-# (la UI usa "Apellido" como select y el nombre se completa solo)
 APROBADORES_MAP = {
     "Oyarzo": "Hector",
     "Arce": "Gustavo",
@@ -246,6 +245,7 @@ from mie_backend import (
     cerrar_mie_con_remediacion,
     obtener_todos_mie,
     actualizar_mie_completo,
+    reemplazar_fotos_antes,   # 👈 NUEVO: reemplazar fotos ANTES
 )
 
 from mie_pdf_email import generar_mie_pdf
@@ -482,7 +482,7 @@ if modo == "Nuevo MIA":
         aprob_nombre = st.text_input(
             "Aprobador - Nombre",
             value=aprob_nombre_auto,
-            disabled=True,  # siempre autocompletado
+            disabled=True,
             key="aprob_nombre_nuevo",
         )
 
@@ -501,7 +501,7 @@ if modo == "Nuevo MIA":
 
     fecha_hora_aprobacion = (
         datetime.combine(fecha_aprob, hora_aprob)
-        if (aprob_apellido)  # si eligió apellido, se considera que hay aprobación cargada
+        if (aprob_apellido)
         else None
     )
 
@@ -537,6 +537,7 @@ if modo == "Nuevo MIA":
                     observaciones=observaciones,
                     creado_por=creado_por,
                     fecha_hora_evento=fecha_hora_evento,
+
                     observador_apellido=observador_apellido or None,
                     observador_nombre=observador_nombre or None,
                     responsable_inst_apellido=responsable_inst_apellido or None,
@@ -557,6 +558,7 @@ if modo == "Nuevo MIA":
                     area_afectada_m2=float(area_afectada_m2),
                     recursos_afectados=recursos_afectados,
                     medidas_inmediatas=medidas_inmediatas or None,
+
                     aprobador_apellido=aprob_apellido or None,
                     aprobador_nombre=aprob_nombre_auto or None,
                     fecha_hora_aprobacion=fecha_hora_aprobacion,
@@ -607,7 +609,7 @@ if modo == "Nuevo MIA":
             )
 
 # =======================================================
-#  MODO 2 - HISTORIAL MIA (CON EDICIÓN SOLO DE CARGA + FOTOS ANTES)
+#  MODO 2 - HISTORIAL MIA (CON EDICIÓN SOLO DE CARGA + REEMPLAZO FOTOS ANTES)
 # =======================================================
 elif modo == "Historial":
     st.header("Historial de MIA")
@@ -957,11 +959,9 @@ elif modo == "Historial":
     # ----- Aprobación (picklist apellido -> autocompleta nombre) -----
     st.markdown("### Aprobación")
 
-    # valores actuales
     ap_current = getattr(detalle, "aprobador_apellido", "") or ""
     no_current = getattr(detalle, "aprobador_nombre", "") or ""
 
-    # si guardaron "Oyarzo" como apellido, perfecto. Si guardaron "Oyarzo, Hector" también lo bancamos.
     ap_guess, no_guess = _split_apellido_nombre(ap_current)
     if ap_guess and not no_current:
         no_current = no_guess
@@ -981,7 +981,7 @@ elif modo == "Historial":
         aprobador_nombre = st.text_input(
             "Aprobador - Nombre",
             value=(aprobador_nombre_auto if aprobador_apellido else (no_current or "")),
-            disabled=True,  # siempre autocompletado
+            disabled=True,
             key=f"aprob_no_{mie_id}",
         )
 
@@ -1024,29 +1024,35 @@ elif modo == "Historial":
                             mie_id=mie_id,
                             creado_por=creado_por or None,
                             fecha_hora_evento=fecha_hora_evento,
+
                             observador_apellido=observador_apellido or None,
                             observador_nombre=observador_nombre or None,
                             responsable_inst_apellido=responsable_inst_apellido or None,
                             responsable_inst_nombre=responsable_inst_nombre or None,
+
                             yacimiento=yacimiento or None,
                             zona=zona or None,
                             nombre_instalacion=nombre_instalacion or None,
                             latitud=latitud or None,
                             longitud=longitud or None,
+
                             tipo_afectacion=tipo_afectacion or None,
                             tipo_derrame=tipo_derrame or None,
                             tipo_instalacion=tipo_instalacion or None,
                             causa_inmediata=causa_inmediata or None,
+
                             volumen_bruto_m3=float(volumen_bruto_m3),
                             volumen_gas_m3=float(volumen_gas_m3),
                             ppm_agua=float(ppm_agua),
                             volumen_crudo_m3=float(volumen_crudo_m3),
                             area_afectada_m2=float(area_afectada_m2),
+
                             recursos_afectados=recursos_afectados or None,
                             causa_probable=causa_probable or None,
                             responsable=responsable or None,
                             observaciones=observaciones or None,
                             medidas_inmediatas=medidas_inmediatas or None,
+
                             aprobador_apellido=aprobador_apellido or None,
                             aprobador_nombre=(APROBADORES_MAP.get(aprobador_apellido, "") if aprobador_apellido else None),
                             fecha_hora_aprobacion=fecha_hora_aprobacion,
@@ -1063,7 +1069,7 @@ elif modo == "Historial":
                 st.rerun()
 
     # ---------------------------------------------------
-    # FOTOS (VISTA) + GESTIÓN SOLO DE ANTES EN MODO EDITAR
+    # FOTOS (VISTA) + REEMPLAZO SOLO DE ANTES EN MODO EDITAR
     # ---------------------------------------------------
     st.subheader("📸 Fotos asociadas")
 
@@ -1079,19 +1085,19 @@ elif modo == "Historial":
     else:
         st.info("No hay fotos ANTES cargadas.")
 
-    # 2) Gestión de fotos ANTES: SOLO cuando está editando
+    # 2) REEMPLAZO de fotos ANTES: SOLO cuando está editando
     if editando:
-        st.markdown("### 🖼️ Gestión de fotos (solo INCIDENTE / ANTES)")
-        st.caption("Acá solo se corrige la carga del MIA. No se toca remediación ni fotos DESPUÉS.")
+        st.markdown("### ♻️ Reemplazar fotos ANTES (INCIDENTE)")
+        st.caption("⚠️ Esto borra TODAS las fotos ANTES actuales y carga las nuevas. No se toca remediación ni fotos DESPUÉS.")
 
         nuevas_fotos_antes = st.file_uploader(
-            "Agregar nuevas fotos ANTES (se suman al MIA)",
+            "Seleccionar nuevas fotos ANTES (reemplazo total)",
             type=["jpg", "jpeg", "png"],
             accept_multiple_files=True,
-            key=f"fotos_antes_edit_{mie_id}",
+            key=f"fotos_antes_replace_{mie_id}",
         )
 
-        if st.button("📤 Subir fotos ANTES", key=f"btn_upload_antes_{mie_id}"):
+        if st.button("♻️ Reemplazar fotos ANTES", key=f"btn_replace_antes_{mie_id}"):
             try:
                 if not nuevas_fotos_antes:
                     st.warning("No seleccionaste fotos.")
@@ -1100,18 +1106,15 @@ elif modo == "Historial":
                     if not codigo:
                         st.error("No se encontró código de MIA para armar la ruta en el bucket.")
                     else:
-                        for archivo in nuevas_fotos_antes:
-                            nombre_destino = (
-                                f"{codigo}/ANTES/"
-                                f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{archivo.name}"
-                            )
-                            blob_name = subir_foto_a_bucket(archivo, nombre_destino)
-                            insertar_foto(mie_id, "ANTES", blob_name)
-
-                        st.success("✅ Fotos ANTES subidas.")
+                        reemplazar_fotos_antes(
+                            mie_id=mie_id,
+                            codigo_mie=codigo,
+                            archivos=nuevas_fotos_antes
+                        )
+                        st.success("✅ Fotos ANTES reemplazadas.")
                         st.rerun()
             except Exception as e:
-                st.error(f"❌ Error subiendo fotos ANTES: {e}")
+                st.error(f"❌ Error reemplazando fotos ANTES: {e}")
 
     # 3) Fotos DESPUÉS: SOLO se muestran fuera de edición (modo lectura),
     #    porque corresponden a remediación / cierre.
@@ -1125,8 +1128,6 @@ elif modo == "Historial":
     # ---------------------------------------------------
     # BLOQUE DE REMEDIACIÓN (NO SE TOCA EN EDICIÓN)
     # ---------------------------------------------------
-    # IMPORTANTE: este bloque queda igual de funcional para cerrar MIA,
-    # pero NO aparece el formulario de carga de remediación si estás editando.
     if not editando:
         if detalle.estado == "CERRADO":
             st.subheader("✅ Datos de remediación")
