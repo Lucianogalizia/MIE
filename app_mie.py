@@ -1,7 +1,4 @@
-# ============================================================
-# app_mie.py — MIA/MIE (Streamlit) COMPLETA (con edición + reemplazo de fotos)
-# ============================================================
-
+# app_mie.py
 import streamlit as st
 from datetime import datetime, date, time
 from io import BytesIO
@@ -10,14 +7,11 @@ import pandas as pd
 # =======================================================
 #   CONFIGURACIÓN GENERAL (DEBE IR ANTES DE CUALQUIER st.*)
 # =======================================================
-st.set_page_config(
-    page_title="MIA - Incidentes Ambientales Declarados",
-    layout="wide"
-)
+st.set_page_config(page_title="MIA - Incidentes Ambientales Declarados", layout="wide")
 
-# =======================================================
-#   HELPERS - PICK LIST HORAS
-# =======================================================
+# ==========================
+#  HELPERS - PICK LIST HORAS
+# ==========================
 def _time_options(step_minutes=5):
     opts = []
     for h in range(24):
@@ -39,11 +33,79 @@ def _nearest_index(opts, t):
 
 HORAS_OPTS = _time_options(step_minutes=5)
 
-# =======================================================
-#   CSS CORPORATIVO
-# =======================================================
+# ==========================
+#  LISTAS / PICKLISTS
+# ==========================
+USUARIOS_CARGA = [
+    "Barros, Claudio",
+    "Muñoz, Hector",
+    "Uribe, Fabian",
+    "Lafeuillade, Geraldine",
+    "Alessandrini, Eliana",
+    "Orellana, Ramiro",
+    "Zuñiga, Ricardo",
+    "Vera, Enzo",
+    "Michunovich, Alejo",
+    "Moreno, Javier",
+    "Momber, Joan",
+    "Perriere, Gaston",
+    "Segura, Eduardo",
+    "Quiroga, Guillermo",
+    "Millanahuel, Jonathan",
+    "Reyna, Jonatan",
+    "Fernandez, Bruno",
+    "Soria, Gabriel",
+    "Argumoza, Gaston",
+    "Rodriguez, Diego",
+    "Catrilaf, Ivana",
+    "Escobar, Leonel",
+    "Maza, Juan Carlos",
+    "Oyarzo, Hector",
+    "Arce, Gustavo",
+    "Acuña, Martin",
+    "Lescano, Federico",
+    "Taboada, Christian",
+]
+
+APROBADORES = [
+    "Oyarzo, Hector",
+    "Arce, Gustavo",
+    "Acuña, Martin",
+    "Lescano, Federico",
+    "Reyes, Pablo",
+    "Taboada, Christian",
+    "Sepulveda, Cristian",
+]
+
+# Mapa apellido -> nombre para autocompletar
+# (la UI usa "Apellido" como select y el nombre se completa solo)
+APROBADORES_MAP = {
+    "Oyarzo": "Hector",
+    "Arce": "Gustavo",
+    "Acuña": "Martin",
+    "Lescano": "Federico",
+    "Reyes": "Pablo",
+    "Taboada": "Christian",
+    "Sepulveda": "Cristian",
+}
+
+def _split_apellido_nombre(full: str):
+    """Devuelve (Apellido, Nombre) desde 'Apellido, Nombre'."""
+    if not full:
+        return ("", "")
+    if "," in full:
+        a, n = full.split(",", 1)
+        return (a.strip(), n.strip())
+    return (full.strip(), "")
+
+APROBADORES_APELLIDOS = [""] + sorted(list(APROBADORES_MAP.keys()))
+
+# ==========================
+# CSS CORPORATIVO
+# ==========================
 st.markdown("""
 <style>
+
     /* --- Fondo general --- */
     .main {
         background-color: #F5F5F7 !important;
@@ -137,17 +199,18 @@ st.markdown("""
         background-color: #e6f0ff !important;
     }
 
-    /* --- Imágenes --- */
+    /* --- Gráficos --- */
     img {
         border-radius: 10px !important;
         box-shadow: 0px 3px 10px rgba(0,0,0,0.15) !important;
     }
+
 </style>
 """, unsafe_allow_html=True)
 
-# =======================================================
+# ==========================
 #  LOGIN SIMPLE POR CONTRASEÑA
-# =======================================================
+# ==========================
 APP_PASSWORD = "MIE2025"
 
 if "auth_ok" not in st.session_state:
@@ -170,9 +233,9 @@ if not st.session_state["auth_ok"]:
 
     st.stop()
 
-# =======================================================
+# ==========================
 # Imports backend (ya autenticado)
-# =======================================================
+# ==========================
 from mie_backend import (
     insertar_mie,
     insertar_foto,
@@ -186,59 +249,6 @@ from mie_backend import (
 )
 
 from mie_pdf_email import generar_mie_pdf
-
-# =======================================================
-# Para "reemplazar fotos" (borrar registros + blobs)
-# - Esto lo hacemos acá para que NO dependas de otro archivo.
-# =======================================================
-from google.cloud import bigquery, storage
-from config import PROJECT_ID, DATASET_ID, BUCKET_NAME
-
-_bq = bigquery.Client(project=PROJECT_ID)
-_st = storage.Client(project=PROJECT_ID)
-
-def _borrar_fotos_mie_y_blobs(mie_id: int, tipo: str):
-    """
-    Elimina:
-    1) Filas de mie_fotos para (mie_id, tipo)
-    2) Blobs en GCS referenciados por esas filas
-    """
-    # 1) Traer blobs
-    q_sel = f"""
-        SELECT url_foto
-        FROM `{PROJECT_ID}.{DATASET_ID}.mie_fotos`
-        WHERE mie_id = @id AND tipo = @tipo
-    """
-    cfg_sel = bigquery.QueryJobConfig(
-        query_parameters=[
-            bigquery.ScalarQueryParameter("id", "INT64", mie_id),
-            bigquery.ScalarQueryParameter("tipo", "STRING", tipo),
-        ]
-    )
-    rows = list(_bq.query(q_sel, job_config=cfg_sel).result())
-    blob_names = [r.url_foto for r in rows if getattr(r, "url_foto", None)]
-
-    # 2) Borrar blobs en bucket (si existen)
-    bucket = _st.bucket(BUCKET_NAME)
-    for bn in blob_names:
-        try:
-            bucket.blob(bn).delete()
-        except Exception:
-            # si no existe o no hay permisos, no frenamos todo
-            pass
-
-    # 3) Borrar registros en BigQuery
-    q_del = f"""
-        DELETE FROM `{PROJECT_ID}.{DATASET_ID}.mie_fotos`
-        WHERE mie_id = @id AND tipo = @tipo
-    """
-    cfg_del = bigquery.QueryJobConfig(
-        query_parameters=[
-            bigquery.ScalarQueryParameter("id", "INT64", mie_id),
-            bigquery.ScalarQueryParameter("tipo", "STRING", tipo),
-        ]
-    )
-    _bq.query(q_del, job_config=cfg_del).result()
 
 # =======================================================
 #   APP
@@ -284,7 +294,13 @@ if modo == "Nuevo MIA":
     )
     drm = None
 
-    creado_por = st.text_input("Usuario que carga el MIA")
+    # Usuario que carga (picklist)
+    creado_por = st.selectbox(
+        "Usuario que carga el MIA",
+        options=[""] + USUARIOS_CARGA,
+        index=0,
+        key="creado_por_nuevo",
+    )
 
     # -----------------------
     # Personas involucradas
@@ -449,15 +465,26 @@ if modo == "Nuevo MIA":
     volumen_estimado_m3 = volumen_bruto_m3
 
     # -----------------------
-    # Aprobación (opcional)
+    # Aprobación (opcional) - picklist apellido -> autocompleta nombre
     # -----------------------
     st.markdown("### Aprobación (opcional)")
 
     col_a1a, col_a1b = st.columns(2)
     with col_a1a:
-        aprobador_apellido = st.text_input("Aprobador - Apellido")
+        aprob_apellido = st.selectbox(
+            "Aprobador - Apellido",
+            options=APROBADORES_APELLIDOS,
+            index=0,
+            key="aprob_apellido_nuevo",
+        )
     with col_a1b:
-        aprobador_nombre = st.text_input("Aprobador - Nombre")
+        aprob_nombre_auto = APROBADORES_MAP.get(aprob_apellido, "") if aprob_apellido else ""
+        aprob_nombre = st.text_input(
+            "Aprobador - Nombre",
+            value=aprob_nombre_auto,
+            disabled=True,  # siempre autocompletado
+            key="aprob_nombre_nuevo",
+        )
 
     col_a2a, col_a2b = st.columns(2)
     with col_a2a:
@@ -474,7 +501,7 @@ if modo == "Nuevo MIA":
 
     fecha_hora_aprobacion = (
         datetime.combine(fecha_aprob, hora_aprob)
-        if (aprobador_apellido or aprobador_nombre)
+        if (aprob_apellido)  # si eligió apellido, se considera que hay aprobación cargada
         else None
     )
 
@@ -486,6 +513,7 @@ if modo == "Nuevo MIA":
         "Subir fotos",
         type=["jpg", "jpeg", "png"],
         accept_multiple_files=True,
+        key="fotos_antes_nuevo",
     )
 
     # -----------------------
@@ -522,15 +550,15 @@ if modo == "Nuevo MIA":
                     tipo_derrame=tipo_derrame or None,
                     tipo_instalacion=tipo_instalacion or None,
                     causa_inmediata=causa_inmediata or None,
-                    volumen_bruto_m3=volumen_bruto_m3,
-                    volumen_gas_m3=volumen_gas_m3,
-                    ppm_agua=ppm_agua if ppm_agua is not None else None,
-                    volumen_crudo_m3=volumen_crudo_m3,
-                    area_afectada_m2=area_afectada_m2,
+                    volumen_bruto_m3=float(volumen_bruto_m3),
+                    volumen_gas_m3=float(volumen_gas_m3),
+                    ppm_agua=float(ppm_agua),
+                    volumen_crudo_m3=float(volumen_crudo_m3),
+                    area_afectada_m2=float(area_afectada_m2),
                     recursos_afectados=recursos_afectados,
                     medidas_inmediatas=medidas_inmediatas or None,
-                    aprobador_apellido=aprobador_apellido or None,
-                    aprobador_nombre=aprobador_nombre or None,
+                    aprobador_apellido=aprob_apellido or None,
+                    aprobador_nombre=aprob_nombre_auto or None,
                     fecha_hora_aprobacion=fecha_hora_aprobacion,
                 )
 
@@ -568,8 +596,8 @@ if modo == "Nuevo MIA":
         except Exception as e:
             st.error(f"⚠️ Error generando PDF: {e}")
         else:
-            nombre_inst = getattr(detalle_envio, "nombre_instalacion", "") or getattr(detalle_envio, "pozo", "") or ""
-            file_name = f"{detalle_envio.codigo_mie} - {nombre_inst}.pdf" if nombre_inst else f"{detalle_envio.codigo_mie}.pdf"
+            nombre_inst = getattr(detalle_envio, "nombre_instalacion", "") or detalle_envio.pozo
+            file_name = f"{detalle_envio.codigo_mie} - {nombre_inst}.pdf"
 
             st.download_button(
                 "📄 Descargar PDF MIA",
@@ -579,7 +607,7 @@ if modo == "Nuevo MIA":
             )
 
 # =======================================================
-#  MODO 2 - HISTORIAL MIA (CON EDICIÓN + REEMPLAZO FOTOS)
+#  MODO 2 - HISTORIAL MIA (CON EDICIÓN SOLO DE CARGA + FOTOS ANTES)
 # =======================================================
 elif modo == "Historial":
     st.header("Historial de MIA")
@@ -591,7 +619,7 @@ elif modo == "Historial":
 
     opciones = {}
     for r in registros:
-        nombre = getattr(r, "nombre_instalacion", None) or getattr(r, "pozo", None) or "(sin instalación)"
+        nombre = getattr(r, "nombre_instalacion", None) or r.pozo or "(sin instalación)"
         label = f"{r.codigo_mie} - {nombre} ({r.estado})"
         opciones[label] = r.mie_id
 
@@ -616,7 +644,7 @@ elif modo == "Historial":
                 st.session_state["edit_mie_id"] = mie_id
                 st.rerun()
         else:
-            st.success("Modo edición activado")
+            st.success("Modo edición activado (solo carga del MIA)")
 
     with c2:
         if editando:
@@ -655,10 +683,17 @@ elif modo == "Historial":
             disabled=True,
             key=f"drm_{mie_id}",
         )
+
+    # usuario carga (picklist también en historial)
+    creado_por_val = getattr(detalle, "creado_por", "") or ""
+    creado_por_opts = [""] + USUARIOS_CARGA
+    creado_por_idx = creado_por_opts.index(creado_por_val) if creado_por_val in creado_por_opts else 0
+
     with colb2:
-        creado_por = st.text_input(
+        creado_por = st.selectbox(
             "Usuario que carga el MIA",
-            getattr(detalle, "creado_por", "") or "",
+            options=creado_por_opts,
+            index=creado_por_idx,
             disabled=(not editando),
             key=f"creado_por_{mie_id}",
         )
@@ -823,10 +858,8 @@ elif modo == "Historial":
     vol_bruto_def = float(getattr(detalle, "volumen_bruto_m3", 0) or 0)
     vol_gas_def   = float(getattr(detalle, "volumen_gas_m3", 0) or 0)
     area_def      = float(getattr(detalle, "area_afectada_m2", 0) or 0)
-
-    ppm_raw = getattr(detalle, "ppm_agua", 0) or 0
     try:
-        ppm_def = float(str(ppm_raw).replace(",", "."))
+        ppm_def = float(getattr(detalle, "ppm_agua", 0) or 0)
     except Exception:
         ppm_def = 0.0
 
@@ -921,21 +954,34 @@ elif modo == "Historial":
         key=f"medidas_{mie_id}",
     )
 
-    # ----- Aprobación -----
+    # ----- Aprobación (picklist apellido -> autocompleta nombre) -----
     st.markdown("### Aprobación")
-    cola1, cola2 = st.columns(2)
 
+    # valores actuales
+    ap_current = getattr(detalle, "aprobador_apellido", "") or ""
+    no_current = getattr(detalle, "aprobador_nombre", "") or ""
+
+    # si guardaron "Oyarzo" como apellido, perfecto. Si guardaron "Oyarzo, Hector" también lo bancamos.
+    ap_guess, no_guess = _split_apellido_nombre(ap_current)
+    if ap_guess and not no_current:
+        no_current = no_guess
+
+    ap_idx = APROBADORES_APELLIDOS.index(ap_guess) if ap_guess in APROBADORES_APELLIDOS else 0
+
+    cola1, cola2 = st.columns(2)
     with cola1:
-        aprobador_apellido = st.text_input(
+        aprobador_apellido = st.selectbox(
             "Aprobador - Apellido",
-            getattr(detalle, "aprobador_apellido", "") or "",
+            options=APROBADORES_APELLIDOS,
+            index=ap_idx,
             disabled=(not editando),
             key=f"aprob_ap_{mie_id}",
         )
+        aprobador_nombre_auto = APROBADORES_MAP.get(aprobador_apellido, "") if aprobador_apellido else ""
         aprobador_nombre = st.text_input(
             "Aprobador - Nombre",
-            getattr(detalle, "aprobador_nombre", "") or "",
-            disabled=(not editando),
+            value=(aprobador_nombre_auto if aprobador_apellido else (no_current or "")),
+            disabled=True,  # siempre autocompletado
             key=f"aprob_no_{mie_id}",
         )
 
@@ -957,66 +1003,12 @@ elif modo == "Historial":
 
     fecha_hora_aprobacion = (
         datetime.combine(fecha_aprob, hora_aprob)
-        if (aprobador_apellido or aprobador_nombre)
+        if (aprobador_apellido)
         else None
     )
 
-    # ======================================================
-    # REEMPLAZO DE FOTOS (solo cuando editando)
-    # ======================================================
-    st.divider()
-    st.subheader("🖼️ Gestión de fotos (reemplazar / agregar)")
-
-    fotos_antes = [f for f in fotos if f["tipo"] == "ANTES"]
-    fotos_despues = [f for f in fotos if f["tipo"] == "DESPUES"]
-
-    cph1, cph2 = st.columns(2)
-    with cph1:
-        if fotos_antes:
-            st.markdown("#### Fotos actuales (ANTES)")
-            for f in fotos_antes:
-                st.markdown(f"**{f['fecha_hora']}**")
-                st.image(f["data"], use_container_width=True)
-        else:
-            st.info("No hay fotos ANTES cargadas.")
-
-    with cph2:
-        if fotos_despues:
-            st.markdown("#### Fotos actuales (DESPUÉS)")
-            for f in fotos_despues:
-                st.markdown(f"**{f['fecha_hora']}**")
-                st.image(f["data"], use_container_width=True)
-        else:
-            st.info("No hay fotos DESPUÉS cargadas.")
-
-    if editando:
-        st.markdown("### 🔁 Reemplazo de fotos")
-
-        colrp1, colrp2 = st.columns(2)
-        with colrp1:
-            reemplazar_antes = st.checkbox("Reemplazar TODAS las fotos ANTES", value=False, key=f"rep_antes_{mie_id}")
-            nuevas_fotos_antes = st.file_uploader(
-                "Subir nuevas fotos ANTES",
-                type=["jpg", "jpeg", "png"],
-                accept_multiple_files=True,
-                key=f"upl_new_antes_{mie_id}",
-            )
-        with colrp2:
-            reemplazar_despues = st.checkbox("Reemplazar TODAS las fotos DESPUÉS", value=False, key=f"rep_desp_{mie_id}")
-            nuevas_fotos_despues = st.file_uploader(
-                "Subir nuevas fotos DESPUÉS",
-                type=["jpg", "jpeg", "png"],
-                accept_multiple_files=True,
-                key=f"upl_new_desp_{mie_id}",
-            )
-
-        st.info(
-            "📌 Si marcás “Reemplazar”, se borran los registros y los archivos del bucket para ese tipo "
-            "(ANTES o DESPUÉS) y luego se suben las nuevas."
-        )
-
     # -----------------------
-    # Guardar cambios (datos + fotos)
+    # Guardar cambios (solo carga del MIA)
     # -----------------------
     if editando:
         st.divider()
@@ -1028,78 +1020,40 @@ elif modo == "Historial":
                     st.error("❌ Nombre de la instalación y Usuario son obligatorios.")
                 else:
                     try:
-                        # 1) Guardar campos editables en mie_eventos
                         actualizar_mie_completo(
                             mie_id=mie_id,
                             creado_por=creado_por or None,
                             fecha_hora_evento=fecha_hora_evento,
-
                             observador_apellido=observador_apellido or None,
                             observador_nombre=observador_nombre or None,
                             responsable_inst_apellido=responsable_inst_apellido or None,
                             responsable_inst_nombre=responsable_inst_nombre or None,
-
                             yacimiento=yacimiento or None,
                             zona=zona or None,
                             nombre_instalacion=nombre_instalacion or None,
                             latitud=latitud or None,
                             longitud=longitud or None,
-
                             tipo_afectacion=tipo_afectacion or None,
                             tipo_derrame=tipo_derrame or None,
                             tipo_instalacion=tipo_instalacion or None,
                             causa_inmediata=causa_inmediata or None,
-
                             volumen_bruto_m3=float(volumen_bruto_m3),
                             volumen_gas_m3=float(volumen_gas_m3),
                             ppm_agua=float(ppm_agua),
                             volumen_crudo_m3=float(volumen_crudo_m3),
                             area_afectada_m2=float(area_afectada_m2),
-
                             recursos_afectados=recursos_afectados or None,
                             causa_probable=causa_probable or None,
                             responsable=responsable or None,
                             observaciones=observaciones or None,
                             medidas_inmediatas=medidas_inmediatas or None,
-
                             aprobador_apellido=aprobador_apellido or None,
-                            aprobador_nombre=aprobador_nombre or None,
+                            aprobador_nombre=(APROBADORES_MAP.get(aprobador_apellido, "") if aprobador_apellido else None),
                             fecha_hora_aprobacion=fecha_hora_aprobacion,
                         )
-
-                        # 2) Fotos: reemplazo / agregado
-                        codigo = getattr(detalle, "codigo_mie", None) or "MIE"
-
-                        # --- ANTES ---
-                        if reemplazar_antes:
-                            _borrar_fotos_mie_y_blobs(mie_id, "ANTES")
-
-                        if nuevas_fotos_antes:
-                            for archivo in nuevas_fotos_antes:
-                                nombre_destino = (
-                                    f"{codigo}/ANTES/"
-                                    f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{archivo.name}"
-                                )
-                                blob_name = subir_foto_a_bucket(archivo, nombre_destino)
-                                insertar_foto(mie_id, "ANTES", blob_name)
-
-                        # --- DESPUÉS ---
-                        if reemplazar_despues:
-                            _borrar_fotos_mie_y_blobs(mie_id, "DESPUES")
-
-                        if nuevas_fotos_despues:
-                            for archivo in nuevas_fotos_despues:
-                                nombre_destino = (
-                                    f"{codigo}/DESPUES/"
-                                    f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{archivo.name}"
-                                )
-                                blob_name = subir_foto_a_bucket(archivo, nombre_destino)
-                                insertar_foto(mie_id, "DESPUES", blob_name)
-
-                        st.success("✅ Cambios guardados (incluye fotos si subiste/reemplazaste).")
+                        st.success("✅ Cambios guardados.")
                         st.session_state["edit_mie_id"] = None
                         st.rerun()
-
                     except Exception as e:
                         st.error(f"❌ Error guardando cambios: {e}")
 
@@ -1109,149 +1063,210 @@ elif modo == "Historial":
                 st.rerun()
 
     # ---------------------------------------------------
-    # BLOQUE DE REMEDIACIÓN
+    # FOTOS (VISTA) + GESTIÓN SOLO DE ANTES EN MODO EDITAR
     # ---------------------------------------------------
-    st.divider()
+    st.subheader("📸 Fotos asociadas")
 
-    if getattr(detalle, "estado", "") == "CERRADO":
-        st.subheader("✅ Datos de remediación")
+    fotos_antes = [f for f in fotos if f["tipo"] == "ANTES"]
+    fotos_despues = [f for f in fotos if f["tipo"] == "DESPUES"]
 
-        fecha_fin = getattr(detalle, "rem_fecha_fin_saneamiento", None)
-        if not fecha_fin:
-            fecha_fin = getattr(detalle, "rem_fecha", None)
-
-        vol_tierra = getattr(detalle, "rem_volumen_tierra_levantada", None)
-        destino_tierra = getattr(detalle, "rem_destino_tierra_impactada", None)
-        vol_liquido = getattr(detalle, "rem_volumen_liquido_recuperado", None)
-        comentarios = (
-            getattr(detalle, "rem_comentarios", None)
-            or getattr(detalle, "rem_detalle", None)
-        )
-        aprob_ap = getattr(detalle, "rem_aprobador_apellido", "")
-        aprob_no = getattr(detalle, "rem_aprobador_nombre", "")
-
-        st.write(f"**Fecha fin saneamiento:** {fecha_fin or '-'}")
-        st.write(f"**Volumen tierra levantada (m³):** {vol_tierra or '-'}")
-        st.write(f"**Destino tierra impactada:** {destino_tierra or '-'}")
-        st.write(f"**Volumen líquido recuperado (m³):** {vol_liquido or '-'}")
-        st.write("**Comentarios:**")
-        st.write(comentarios or "-")
-        st.write(f"**Aprobador final:** {aprob_ap} {aprob_no}")
-
-        st.success("Este MIA ya está CERRADO.")
-
-        st.subheader("📄 Generar PDF de este MIA")
-
-        try:
-            pdf_bytes_hist = generar_mie_pdf(detalle, obtener_fotos_mie(mie_id))
-        except Exception as e:
-            st.error(f"⚠️ Error generando PDF: {e}")
-        else:
-            nombre_inst = (
-                getattr(detalle, "nombre_instalacion", None)
-                or getattr(detalle, "pozo", None)
-                or ""
-            ).strip()
-
-            file_name_hist = (
-                f"{detalle.codigo_mie} - {nombre_inst}.pdf"
-                if nombre_inst
-                else f"{detalle.codigo_mie}.pdf"
-            )
-
-            st.download_button(
-                "📄 Descargar PDF de este MIA",
-                data=pdf_bytes_hist,
-                file_name=file_name_hist,
-                mime="application/pdf",
-            )
-
+    # 1) Fotos actuales ANTES (siempre se ven)
+    if fotos_antes:
+        st.markdown("#### Fotos del incidente (ANTES)")
+        for f in fotos_antes:
+            st.markdown(f"**{f['fecha_hora']}**")
+            st.image(f["data"], use_container_width=True)
     else:
-        st.subheader("🛠️ Cargar datos de remediación y CERRAR MIA")
+        st.info("No hay fotos ANTES cargadas.")
 
-        colr1, colr2 = st.columns(2)
-        with colr1:
-            fecha_fin = st.date_input(
-                "Fecha finalización saneamiento",
-                datetime.now().date(),
-                key=f"rem_fecha_{mie_id}",
-            )
-        with colr2:
-            ahora = datetime.now().time().replace(microsecond=0)
-            hora_fin = st.selectbox(
-                "Hora finalización",
-                options=HORAS_OPTS,
-                format_func=lambda t: t.strftime("%H:%M"),
-                index=_nearest_index(HORAS_OPTS, ahora),
-                key=f"rem_hora_{mie_id}",
-            )
+    # 2) Gestión de fotos ANTES: SOLO cuando está editando
+    if editando:
+        st.markdown("### 🖼️ Gestión de fotos (solo INCIDENTE / ANTES)")
+        st.caption("Acá solo se corrige la carga del MIA. No se toca remediación ni fotos DESPUÉS.")
 
-        fecha_fin_dt = datetime.combine(fecha_fin, hora_fin)
-
-        colv1r, colv2r = st.columns(2)
-        with colv1r:
-            vol_tierra = st.number_input(
-                "Volumen tierra levantada (m³)",
-                min_value=0.0,
-                step=0.1,
-                key=f"vol_tierra_{mie_id}",
-            )
-        with colv2r:
-            vol_liquido = st.number_input(
-                "Volumen líquido recuperado (m³)",
-                min_value=0.0,
-                step=0.1,
-                key=f"vol_liq_{mie_id}",
-            )
-
-        destino_tierra = st.text_input("Destino tierra impactada", key=f"destino_{mie_id}")
-        comentarios = st.text_area("Comentarios de remediación", key=f"coment_{mie_id}")
-
-        colap1, colap2 = st.columns(2)
-        with colap1:
-            aprob_ap = st.text_input("Aprobador final - Apellido", key=f"ap_ap_{mie_id}")
-        with colap2:
-            aprob_no = st.text_input("Aprobador final - Nombre", key=f"ap_no_{mie_id}")
-
-        st.markdown("### 📸 Fotos DESPUÉS del Saneamiento")
-        fotos_despues = st.file_uploader(
-            "Subir fotos",
+        nuevas_fotos_antes = st.file_uploader(
+            "Agregar nuevas fotos ANTES (se suman al MIA)",
             type=["jpg", "jpeg", "png"],
             accept_multiple_files=True,
-            key=f"fotos_desp_{mie_id}",
+            key=f"fotos_antes_edit_{mie_id}",
         )
 
-        if st.button("✔️ Guardar remediación y CERRAR MIA", key=f"btn_cerrar_{mie_id}"):
+        if st.button("📤 Subir fotos ANTES", key=f"btn_upload_antes_{mie_id}"):
             try:
-                cerrar_mie_con_remediacion(
-                    mie_id,
-                    fecha_fin_dt,
-                    vol_tierra,
-                    destino_tierra,
-                    vol_liquido,
-                    comentarios,
-                    aprob_ap,
-                    aprob_no,
+                if not nuevas_fotos_antes:
+                    st.warning("No seleccionaste fotos.")
+                else:
+                    codigo = getattr(detalle, "codigo_mie", None)
+                    if not codigo:
+                        st.error("No se encontró código de MIA para armar la ruta en el bucket.")
+                    else:
+                        for archivo in nuevas_fotos_antes:
+                            nombre_destino = (
+                                f"{codigo}/ANTES/"
+                                f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{archivo.name}"
+                            )
+                            blob_name = subir_foto_a_bucket(archivo, nombre_destino)
+                            insertar_foto(mie_id, "ANTES", blob_name)
+
+                        st.success("✅ Fotos ANTES subidas.")
+                        st.rerun()
+            except Exception as e:
+                st.error(f"❌ Error subiendo fotos ANTES: {e}")
+
+    # 3) Fotos DESPUÉS: SOLO se muestran fuera de edición (modo lectura),
+    #    porque corresponden a remediación / cierre.
+    if (not editando):
+        if fotos_despues:
+            st.markdown("#### Fotos de remediación (DESPUÉS)")
+            for f in fotos_despues:
+                st.markdown(f"**{f['fecha_hora']}**")
+                st.image(f["data"], use_container_width=True)
+
+    # ---------------------------------------------------
+    # BLOQUE DE REMEDIACIÓN (NO SE TOCA EN EDICIÓN)
+    # ---------------------------------------------------
+    # IMPORTANTE: este bloque queda igual de funcional para cerrar MIA,
+    # pero NO aparece el formulario de carga de remediación si estás editando.
+    if not editando:
+        if detalle.estado == "CERRADO":
+            st.subheader("✅ Datos de remediación")
+
+            fecha_fin = getattr(detalle, "rem_fecha_fin_saneamiento", None)
+            if not fecha_fin:
+                fecha_fin = getattr(detalle, "rem_fecha", None)
+
+            vol_tierra = getattr(detalle, "rem_volumen_tierra_levantada", None)
+            destino_tierra = getattr(detalle, "rem_destino_tierra_impactada", None)
+            vol_liquido = getattr(detalle, "rem_volumen_liquido_recuperado", None)
+            comentarios = (
+                getattr(detalle, "rem_comentarios", None)
+                or getattr(detalle, "rem_detalle", None)
+            )
+            aprob_ap = getattr(detalle, "rem_aprobador_apellido", "")
+            aprob_no = getattr(detalle, "rem_aprobador_nombre", "")
+
+            st.write(f"**Fecha fin saneamiento:** {fecha_fin or '-'}")
+            st.write(f"**Volumen tierra levantada (m³):** {vol_tierra or '-'}")
+            st.write(f"**Destino tierra impactada:** {destino_tierra or '-'}")
+            st.write(f"**Volumen líquido recuperado (m³):** {vol_liquido or '-'}")
+            st.write("**Comentarios:**")
+            st.write(comentarios or "-")
+            st.write(f"**Aprobador final:** {aprob_ap} {aprob_no}")
+
+            st.success("Este MIA ya está CERRADO.")
+
+            st.subheader("📄 Generar PDF de este MIA")
+
+            try:
+                pdf_bytes_hist = generar_mie_pdf(detalle, fotos)
+            except Exception as e:
+                st.error(f"⚠️ Error generando PDF: {e}")
+            else:
+                nombre_inst = (
+                    getattr(detalle, "nombre_instalacion", None)
+                    or detalle.pozo
+                    or ""
+                ).strip()
+
+                file_name_hist = (
+                    f"{detalle.codigo_mie} - {nombre_inst}.pdf"
+                    if nombre_inst
+                    else f"{detalle.codigo_mie}.pdf"
                 )
 
-                if fotos_despues:
-                    codigo = getattr(detalle, "codigo_mie", None) or "MIE"
-                    for archivo in fotos_despues:
-                        nombre_destino = (
-                            f"{codigo}/DESPUES/"
-                            f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{archivo.name}"
-                        )
-                        blob_name = subir_foto_a_bucket(archivo, nombre_destino)
-                        insertar_foto(mie_id, "DESPUES", blob_name)
+                st.download_button(
+                    "📄 Descargar PDF de este MIA",
+                    data=pdf_bytes_hist,
+                    file_name=file_name_hist,
+                    mime="application/pdf",
+                )
 
-                st.success("MIA cerrado exitosamente.")
-                st.rerun()
+        else:
+            st.subheader("🛠️ Cargar datos de remediación y CERRAR MIA")
 
-            except Exception as e:
-                st.error(f"❌ Error al cerrar MIA: {e}")
+            colr1, colr2 = st.columns(2)
+            with colr1:
+                fecha_fin = st.date_input(
+                    "Fecha finalización saneamiento",
+                    datetime.now().date(),
+                    key=f"rem_fecha_{mie_id}",
+                )
+            with colr2:
+                ahora = datetime.now().time().replace(microsecond=0)
+                hora_fin = st.selectbox(
+                    "Hora finalización",
+                    options=HORAS_OPTS,
+                    format_func=lambda t: t.strftime("%H:%M"),
+                    index=_nearest_index(HORAS_OPTS, ahora),
+                    key=f"rem_hora_{mie_id}",
+                )
+
+            fecha_fin_dt = datetime.combine(fecha_fin, hora_fin)
+
+            colv1r, colv2r = st.columns(2)
+            with colv1r:
+                vol_tierra = st.number_input(
+                    "Volumen tierra levantada (m³)",
+                    min_value=0.0,
+                    step=0.1,
+                    key=f"vol_tierra_{mie_id}",
+                )
+            with colv2r:
+                vol_liquido = st.number_input(
+                    "Volumen líquido recuperado (m³)",
+                    min_value=0.0,
+                    step=0.1,
+                    key=f"vol_liq_{mie_id}",
+                )
+
+            destino_tierra = st.text_input("Destino tierra impactada", key=f"destino_{mie_id}")
+            comentarios = st.text_area("Comentarios de remediación", key=f"coment_{mie_id}")
+
+            colap1, colap2 = st.columns(2)
+            with colap1:
+                aprob_ap = st.text_input("Aprobador final - Apellido", key=f"ap_ap_{mie_id}")
+            with colap2:
+                aprob_no = st.text_input("Aprobador final - Nombre", key=f"ap_no_{mie_id}")
+
+            st.markdown("### 📸 Fotos DESPUÉS del Saneamiento")
+            fotos_despues_up = st.file_uploader(
+                "Subir fotos",
+                type=["jpg", "jpeg", "png"],
+                accept_multiple_files=True,
+                key=f"fotos_desp_{mie_id}",
+            )
+
+            if st.button("✔️ Guardar remediación y CERRAR MIA", key=f"btn_cerrar_{mie_id}"):
+                try:
+                    cerrar_mie_con_remediacion(
+                        mie_id,
+                        fecha_fin_dt,
+                        vol_tierra,
+                        destino_tierra,
+                        vol_liquido,
+                        comentarios,
+                        aprob_ap,
+                        aprob_no,
+                    )
+
+                    if fotos_despues_up:
+                        codigo = detalle.codigo_mie
+                        for archivo in fotos_despues_up:
+                            nombre_destino = (
+                                f"{codigo}/DESPUES/"
+                                f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{archivo.name}"
+                            )
+                            blob_name = subir_foto_a_bucket(archivo, nombre_destino)
+                            insertar_foto(mie_id, "DESPUES", blob_name)
+
+                    st.success("MIA cerrado exitosamente.")
+                    st.rerun()
+
+                except Exception as e:
+                    st.error(f"❌ Error al cerrar MIA: {e}")
 
 # =======================================================
-#  MODO 3 - ESTADISTICAS
+#  MODO 2.5 - ESTADISTICAS
 # =======================================================
 elif modo == "Estadísticas":
     st.header("Estadísticas de MIA")
@@ -1323,7 +1338,6 @@ elif modo == "Estadísticas":
 
     df_cerrados = df_filt.dropna(subset=["rem_fecha_fin_saneamiento"])
     if not df_cerrados.empty:
-        df_cerrados = df_cerrados.copy()
         df_cerrados["dias_cierre"] = (
             df_cerrados["rem_fecha_fin_saneamiento"] - df_cerrados["fecha_hora_evento"]
         ).dt.days
@@ -1331,13 +1345,13 @@ elif modo == "Estadísticas":
     else:
         promedio_cierre = "—"
 
-    volumen_activo = df_filt[df_filt["estado"] == "ABIERTO"]["volumen_estimado_m3"].fillna(0).sum()
+    volumen_activo = df_filt[df_filt["estado"] == "ABIERTO"]["volumen_estimado_m3"].sum()
     volumen_remediado = (
         df_filt["rem_volumen_liquido_recuperado"].fillna(0)
         + df_filt["rem_volumen_tierra_levantada"].fillna(0)
     ).sum()
 
-    df_mag = df_filt["magnitud"].value_counts().to_dict() if "magnitud" in df_filt.columns else {}
+    df_mag = df_filt["magnitud"].value_counts().to_dict()
     n1 = df_mag.get("N1", 0)
     n2 = df_mag.get("N2", 0)
     n3 = df_mag.get("N3", 0)
@@ -1351,8 +1365,8 @@ elif modo == "Estadísticas":
 
     col4, col5, col6 = st.columns(3)
     col4.metric("⏱️ Tiempo promedio de cierre (días)", promedio_cierre)
-    col5.metric("🛢️ Volumen activo (m³)", round(float(volumen_activo), 2))
-    col6.metric("♻️ Volumen remediado total (m³)", round(float(volumen_remediado), 2))
+    col5.metric("🛢️ Volumen activo (m³)", round(volumen_activo, 2))
+    col6.metric("♻️ Volumen remediado total (m³)", round(volumen_remediado, 2))
 
     st.divider()
 
@@ -1484,7 +1498,7 @@ elif modo == "Estadísticas":
         st.info("No se encontró la columna 'tipo_derrame'.")
 
 # =======================================================
-#  MODO 4 - EXPORTAR MIA A EXCEL
+#  MODO 3 - EXPORTAR MIA A EXCEL
 # =======================================================
 elif modo == "Exportar MIA":
     st.header("Exportar base completa de MIA")
