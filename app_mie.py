@@ -465,9 +465,13 @@ if modo == "Nuevo MIA":
     volumen_estimado_m3 = volumen_bruto_m3
 
     # -----------------------
-    # Aprobación (opcional) - picklist apellido -> autocompleta nombre
+    # Aprobación (opcional) - picklist apellido -> autocompleta nombre (FIX)
     # -----------------------
     st.markdown("### Aprobación (opcional)")
+
+    def _sync_aprob_nombre_nuevo():
+        ap = st.session_state.get("aprob_apellido_nuevo", "")
+        st.session_state["aprob_nombre_nuevo"] = APROBADORES_MAP.get(ap, "") if ap else ""
 
     col_a1a, col_a1b = st.columns(2)
     with col_a1a:
@@ -476,14 +480,18 @@ if modo == "Nuevo MIA":
             options=APROBADORES_APELLIDOS,
             index=0,
             key="aprob_apellido_nuevo",
+            on_change=_sync_aprob_nombre_nuevo,
         )
+
+    # asegura autocompletado en el primer render también
+    if "aprob_nombre_nuevo" not in st.session_state:
+        _sync_aprob_nombre_nuevo()
+
     with col_a1b:
-        aprob_nombre_auto = APROBADORES_MAP.get(aprob_apellido, "") if aprob_apellido else ""
         aprob_nombre = st.text_input(
             "Aprobador - Nombre",
-            value=aprob_nombre_auto,
-            disabled=True,
             key="aprob_nombre_nuevo",
+            disabled=True,
         )
 
     col_a2a, col_a2b = st.columns(2)
@@ -501,7 +509,7 @@ if modo == "Nuevo MIA":
 
     fecha_hora_aprobacion = (
         datetime.combine(fecha_aprob, hora_aprob)
-        if (aprob_apellido)
+        if st.session_state.get("aprob_apellido_nuevo")
         else None
     )
 
@@ -559,8 +567,8 @@ if modo == "Nuevo MIA":
                     recursos_afectados=recursos_afectados,
                     medidas_inmediatas=medidas_inmediatas or None,
 
-                    aprobador_apellido=aprob_apellido or None,
-                    aprobador_nombre=aprob_nombre_auto or None,
+                    aprobador_apellido=st.session_state.get("aprob_apellido_nuevo") or None,
+                    aprobador_nombre=st.session_state.get("aprob_nombre_nuevo") or None,
                     fecha_hora_aprobacion=fecha_hora_aprobacion,
                 )
 
@@ -956,8 +964,15 @@ elif modo == "Historial":
         key=f"medidas_{mie_id}",
     )
 
-    # ----- Aprobación (picklist apellido -> autocompleta nombre) -----
+    # ----- Aprobación (picklist apellido -> autocompleta nombre) (FIX) -----
     st.markdown("### Aprobación")
+
+    k_ap = f"aprob_ap_{mie_id}"
+    k_no = f"aprob_no_{mie_id}"
+
+    def _sync_aprob_nombre_hist():
+        ap = st.session_state.get(k_ap, "")
+        st.session_state[k_no] = APROBADORES_MAP.get(ap, "") if ap else ""
 
     ap_current = getattr(detalle, "aprobador_apellido", "") or ""
     no_current = getattr(detalle, "aprobador_nombre", "") or ""
@@ -966,7 +981,13 @@ elif modo == "Historial":
     if ap_guess and not no_current:
         no_current = no_guess
 
-    ap_idx = APROBADORES_APELLIDOS.index(ap_guess) if ap_guess in APROBADORES_APELLIDOS else 0
+    # inicialización (solo una vez por mie_id)
+    if k_ap not in st.session_state:
+        st.session_state[k_ap] = ap_guess if ap_guess in APROBADORES_MAP else ""
+    if k_no not in st.session_state:
+        st.session_state[k_no] = APROBADORES_MAP.get(st.session_state[k_ap], "") if st.session_state[k_ap] else (no_current or "")
+
+    ap_idx = APROBADORES_APELLIDOS.index(st.session_state[k_ap]) if st.session_state[k_ap] in APROBADORES_APELLIDOS else 0
 
     cola1, cola2 = st.columns(2)
     with cola1:
@@ -975,14 +996,13 @@ elif modo == "Historial":
             options=APROBADORES_APELLIDOS,
             index=ap_idx,
             disabled=(not editando),
-            key=f"aprob_ap_{mie_id}",
+            key=k_ap,
+            on_change=_sync_aprob_nombre_hist,
         )
-        aprobador_nombre_auto = APROBADORES_MAP.get(aprobador_apellido, "") if aprobador_apellido else ""
         aprobador_nombre = st.text_input(
             "Aprobador - Nombre",
-            value=(aprobador_nombre_auto if aprobador_apellido else (no_current or "")),
+            key=k_no,
             disabled=True,
-            key=f"aprob_no_{mie_id}",
         )
 
     with cola2:
@@ -1003,7 +1023,7 @@ elif modo == "Historial":
 
     fecha_hora_aprobacion = (
         datetime.combine(fecha_aprob, hora_aprob)
-        if (aprobador_apellido)
+        if st.session_state.get(k_ap)
         else None
     )
 
@@ -1053,8 +1073,8 @@ elif modo == "Historial":
                             observaciones=observaciones or None,
                             medidas_inmediatas=medidas_inmediatas or None,
 
-                            aprobador_apellido=aprobador_apellido or None,
-                            aprobador_nombre=(APROBADORES_MAP.get(aprobador_apellido, "") if aprobador_apellido else None),
+                            aprobador_apellido=st.session_state.get(k_ap) or None,
+                            aprobador_nombre=st.session_state.get(k_no) or None,
                             fecha_hora_aprobacion=fecha_hora_aprobacion,
                         )
                         st.success("✅ Cambios guardados.")
