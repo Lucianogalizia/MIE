@@ -45,6 +45,17 @@ def subir_foto_a_bucket(file_obj, nombre_destino: str) -> str:
     return nombre_destino
 
 
+def borrar_blob_bucket(blob_name: str):
+    if not blob_name:
+        return
+    bucket = storage_client.bucket(BUCKET_NAME)
+    blob = bucket.blob(blob_name)
+    try:
+        blob.delete()
+    except Exception:
+        pass
+
+
 def insertar_foto(mie_id: int, tipo: str, blob_name: str):
     tabla = f"{PROJECT_ID}.{DATASET_ID}.mie_fotos"
     foto_id = obtener_siguiente_id("mie_fotos", "id")
@@ -90,6 +101,66 @@ def obtener_fotos_mie(mie_id: int):
         })
 
     return fotos
+
+
+# ---------------------------------------------------------
+# Fotos – REEMPLAZO (solo ANTES)
+# ---------------------------------------------------------
+def _obtener_fotos_meta(mie_id: int, tipo: str):
+    query = f"""
+        SELECT id, url_foto
+        FROM `{PROJECT_ID}.{DATASET_ID}.mie_fotos`
+        WHERE mie_id = @id AND tipo = @tipo
+    """
+    cfg = bigquery.QueryJobConfig(
+        query_parameters=[
+            bigquery.ScalarQueryParameter("id", "INT64", mie_id),
+            bigquery.ScalarQueryParameter("tipo", "STRING", tipo),
+        ]
+    )
+    return list(bq_client.query(query, cfg).result())
+
+
+def _borrar_fotos_bq(mie_id: int, tipo: str):
+    query = f"""
+        DELETE FROM `{PROJECT_ID}.{DATASET_ID}.mie_fotos`
+        WHERE mie_id = @id AND tipo = @tipo
+    """
+    cfg = bigquery.QueryJobConfig(
+        query_parameters=[
+            bigquery.ScalarQueryParameter("id", "INT64", mie_id),
+            bigquery.ScalarQueryParameter("tipo", "STRING", tipo),
+        ]
+    )
+    bq_client.query(query, cfg).result()
+
+
+def reemplazar_fotos_antes(mie_id: int, codigo_mie: str, archivos):
+    """
+    Reemplaza TODAS las fotos tipo ANTES.
+    No afecta fotos DESPUES / remediación.
+    """
+    if not archivos:
+        return
+
+    # 1) obtener fotos actuales ANTES
+    actuales = _obtener_fotos_meta(mie_id, "ANTES")
+
+    # 2) borrar blobs
+    for f in actuales:
+        borrar_blob_bucket(f.url_foto)
+
+    # 3) borrar registros BQ
+    _borrar_fotos_bq(mie_id, "ANTES")
+
+    # 4) subir nuevas
+    for archivo in archivos:
+        nombre_destino = (
+            f"{codigo_mie}/ANTES/"
+            f"{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}_{archivo.name}"
+        )
+        blob_name = subir_foto_a_bucket(archivo, nombre_destino)
+        insertar_foto(mie_id, "ANTES", blob_name)
 
 
 # ---------------------------------------------------------
