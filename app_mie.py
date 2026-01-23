@@ -38,6 +38,7 @@ HORAS_OPTS = _time_options(step_minutes=5)
 # ==========================
 USUARIOS_CARGA = [
     "Barros, Claudio",
+    "Martinez, Cristian",
     "Muñoz, Hector",
     "Uribe, Fabian",
     "Lafeuillade, Geraldine",
