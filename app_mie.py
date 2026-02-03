@@ -7,7 +7,7 @@ import pandas as pd
 # =======================================================
 #   CONFIGURACIÓN GENERAL (DEBE IR ANTES DE CUALQUIER st.*)
 # =======================================================
-st.set_page_config(page_title="MIA - Incidentes Ambientales", layout="wide")
+st.set_page_config(page_title="MIA - Módulo de Incidentes Ambientales", layout="wide")
 
 # ==========================
 #  HELPERS - PICK LIST HORAS
