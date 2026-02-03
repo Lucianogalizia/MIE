@@ -101,6 +101,82 @@ def _split_apellido_nombre(full: str):
 APROBADORES_APELLIDOS = [""] + sorted(list(APROBADORES_MAP.keys()))
 
 # ==========================
+#  PICKLISTS NUEVOS (ZONA / RESPONSABLE / EVENTO)
+# ==========================
+ZONAS_PICK = [
+    "LH-CG",
+    "CAÑADON LA ESCONDIDA 02",
+    "CAÑADON LA ESCONDIDA 10",
+    "BARRANCA BAYA",
+    "PLANTA LH-03",
+    "PLANTA CeN-10",
+]
+
+RESPONSABLES_PICK = [
+    "Integridad",
+    "Mantenimiento",
+    "Ingeniería",
+    "Operaciones (producción/planta)",
+    "Seguridad",
+]
+
+TIPO_AFECTACION_PICK = [
+    "Derrame menor",
+    "Derrame mayor",
+    "Emisión",
+]
+
+TIPO_DERRAME_PICK = [
+    "Petróleo",
+    "Petróleo + agua de formación",
+    "Agua de formación",
+    "Gases",
+    "Químicos",
+    "Derivados de hidrocarburo (aceites, gas oil, etc)",
+]
+
+TIPO_INSTALACION_PICK = [
+    "Pozo",
+    "Línea de conducción",
+    "Ducto",
+    "Tanque",
+    "Separador",
+    "Free Water",
+    "Planta",
+    "Batería",
+    "Booster",
+    "Calentador",
+    "PIA",
+    "Colector",
+    "Otro (detallar en Notas/Observaciones)",
+]
+
+CAUSA_INMEDIATA_PICK = [
+    "Acumulación parafina",
+    "Aluvión",
+    "Animales",
+    "Choque o colisión",
+    "Corrosión",
+    "Desgaste",
+    "Exceso de presión",
+    "Formación de hidratos",
+    "Golpe por maquinaria",
+    "Golpe por maquina",
+    "Junta o conexión",
+    "Mantenimiento",
+    "Nieve o lluvia",
+    "Puesta en marcha",
+    "Rayo",
+    "Reparación",
+    "Rotura o fisura",
+    "Sabotaje o robo",
+    "Sistema de control",
+    "Sistema de seguridad",
+    "vientos",
+]
+
+
+# ==========================
 # CSS CORPORATIVO
 # ==========================
 st.markdown("""
@@ -335,7 +411,11 @@ if modo == "Nuevo MIA":
         )
 
     with col_u2:
-        zona = st.text_input("Zona")
+        zona = st.selectbox(
+            "Zona",
+            options=[""] + ZONAS_PICK,
+            index=0,
+        )
 
     with col_u3:
         nombre_instalacion = st.text_input("Nombre de la instalación")
@@ -362,44 +442,20 @@ if modo == "Nuevo MIA":
     with col_t1:
         tipo_afectacion = st.selectbox(
             "Tipo de afectación",
-            ["", "Derrame", "Aventamiento de gas"],
+            options=[""] + TIPO_AFECTACION_PICK,
         )
         tipo_derrame = st.selectbox(
             "Tipo de derrame",
-            [
-                "",
-                "Agua de Produccion",
-                "Petroleo Hidratado",
-                "Gas",
-                "Otro (Detallar en notas)",
-            ],
+            options=[""] + TIPO_DERRAME_PICK,
         )
     with col_t2:
         tipo_instalacion = st.selectbox(
             "Tipo de instalación",
-            [
-                "",
-                "Pozo",
-                "Linea de conduccion",
-                "Ducto",
-                "Tanque",
-                "Separador",
-                "Free-Water",
-                "Planta",
-                "Batería",
-            ],
+            options=[""] + TIPO_INSTALACION_PICK,
         )
         causa_inmediata = st.selectbox(
             "Causa inmediata",
-            [
-                "",
-                "Corrosion",
-                "Falla de Material",
-                "Error de operación",
-                "Falla en sistemas de control",
-                "Sabotaje",
-                "Fuerza Mayor",
-            ],
+            options=[""] + CAUSA_INMEDIATA_PICK,
         )
 
     # -----------------------
@@ -458,7 +514,11 @@ if modo == "Nuevo MIA":
     # -----------------------
     st.markdown("### Otros datos / notas")
     causa_probable = st.text_input("Causa probable")
-    responsable = st.text_input("Responsable")
+    responsable = st.selectbox(
+        "Responsable",
+        options=[""] + RESPONSABLES_PICK,
+        index=0,
+    )
     observaciones = st.text_area("Notas / observaciones")
     medidas_inmediatas = st.text_area("Medidas inmediatas adoptadas")
 
@@ -787,9 +847,16 @@ elif modo == "Historial":
             key=f"yacimiento_{mie_id}",
         )
     with colu2:
-        zona = st.text_input(
+        zona_val = getattr(detalle, "zona", "") or ""
+        zona_opts = [""] + ZONAS_PICK
+        if zona_val and zona_val not in zona_opts:
+            zona_opts = [zona_val] + zona_opts
+        zona_idx = zona_opts.index(zona_val) if zona_val in zona_opts else 0
+
+        zona = st.selectbox(
             "Zona",
-            getattr(detalle, "zona", "") or "",
+            options=zona_opts,
+            index=zona_idx,
             disabled=(not editando),
             key=f"zona_{mie_id}",
         )
@@ -821,10 +888,10 @@ elif modo == "Historial":
     st.markdown("### Características del evento")
     colc1, colc2 = st.columns(2)
 
-    tipo_afectacion_opts = ["", "Derrame", "Aventamiento de gas"]
-    tipo_derrame_opts = ["", "Agua de Produccion", "Petroleo Hidratado", "Gas", "Otro (Detallar en notas)"]
-    tipo_instalacion_opts = ["", "Pozo", "Linea de conduccion", "Ducto", "Tanque", "Separador", "Free-Water", "Planta", "Batería"]
-    causa_inmediata_opts = ["", "Corrosion", "Falla de Material", "Error de operación", "Falla en sistemas de control", "Sabotaje", "Fuerza Mayor"]
+    tipo_afectacion_opts = [""] + TIPO_AFECTACION_PICK
+    tipo_derrame_opts = [""] + TIPO_DERRAME_PICK
+    tipo_instalacion_opts = [""] + TIPO_INSTALACION_PICK
+    causa_inmediata_opts = [""] + CAUSA_INMEDIATA_PICK
 
     ta_val = getattr(detalle, "tipo_afectacion", "") or ""
     td_val = getattr(detalle, "tipo_derrame", "") or ""
@@ -944,9 +1011,16 @@ elif modo == "Historial":
             key=f"causa_prob_{mie_id}",
         )
     with coln2:
-        responsable = st.text_input(
+        responsable_val = getattr(detalle, "responsable", "") or ""
+        responsable_opts = [""] + RESPONSABLES_PICK
+        if responsable_val and responsable_val not in responsable_opts:
+            responsable_opts = [responsable_val] + responsable_opts
+        responsable_idx = responsable_opts.index(responsable_val) if responsable_val in responsable_opts else 0
+
+        responsable = st.selectbox(
             "Responsable",
-            getattr(detalle, "responsable", "") or "",
+            options=responsable_opts,
+            index=responsable_idx,
             disabled=(not editando),
             key=f"responsable_{mie_id}",
         )
