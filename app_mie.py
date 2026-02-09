@@ -3,7 +3,7 @@ import streamlit as st
 from datetime import datetime, date, time
 from io import BytesIO
 import pandas as pd
-import time
+import time as time_mod
 import json
 import hashlib
 
@@ -639,7 +639,7 @@ if modo == "Nuevo MIA":
 
         # Anti doble envío (mismo formulario dentro de 60s)
         submit_key = _make_submit_key()
-        now = time.time()
+        now = time_mod.time()
         if (st.session_state["last_submit_key"] == submit_key) and (now - st.session_state["last_submit_ts"] < 60):
             st.warning("Este MIA ya fue enviado recién. Evito duplicarlo.")
             st.stop()
