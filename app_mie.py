@@ -3,6 +3,9 @@ import streamlit as st
 from datetime import datetime, date, time
 from io import BytesIO
 import pandas as pd
+import time
+import json
+import hashlib
 
 # =======================================================
 #   CONFIGURACIÓN GENERAL (DEBE IR ANTES DE CUALQUIER st.*)
@@ -586,15 +589,70 @@ if modo == "Nuevo MIA":
     )
 
     # -----------------------
-    # Botón GUARDAR
+    # Anti doble envío (estado + huella)
     # -----------------------
-    btn_guardar = st.button("Guardar MIA")
+    if "saving_mia" not in st.session_state:
+        st.session_state["saving_mia"] = False
+    if "last_submit_key" not in st.session_state:
+        st.session_state["last_submit_key"] = None
+    if "last_submit_ts" not in st.session_state:
+        st.session_state["last_submit_ts"] = 0.0
+
+    def _make_submit_key():
+        payload = {
+            "fecha_evento": str(fecha_evento),
+            "hora_evento": hora_evento.strftime("%H:%M") if hora_evento else "",
+            "creado_por": creado_por or "",
+            "yacimiento": yacimiento or "",
+            "zona": zona or "",
+            "nombre_instalacion": nombre_instalacion or "",
+            "latitud": latitud or "",
+            "longitud": longitud or "",
+            "tipo_afectacion": tipo_afectacion or "",
+            "tipo_derrame": tipo_derrame or "",
+            "tipo_instalacion": tipo_instalacion or "",
+            "causa_inmediata": causa_inmediata or "",
+            "volumen_bruto_m3": float(volumen_bruto_m3 or 0),
+            "volumen_gas_m3": float(volumen_gas_m3 or 0),
+            "ppm_agua": float(ppm_agua or 0),
+            "area_afectada_m2": float(area_afectada_m2 or 0),
+            "recursos_afectados": recursos_afectados or "",
+            "causa_probable": causa_probable or "",
+            "responsable": responsable or "",
+            "observaciones": observaciones or "",
+            "medidas_inmediatas": medidas_inmediatas or "",
+            "aprob_apellido": st.session_state.get("aprob_apellido_nuevo") or "",
+            "aprob_nombre": st.session_state.get("aprob_nombre_nuevo") or "",
+        }
+        raw = json.dumps(payload, sort_keys=True, ensure_ascii=False).encode("utf-8")
+        return hashlib.sha256(raw).hexdigest()
+
+    # -----------------------
+    # Botón GUARDAR (con anti-duplicado)
+    # -----------------------
+    btn_guardar = st.button("Guardar MIA", disabled=st.session_state["saving_mia"])
 
     if btn_guardar:
+        if st.session_state["saving_mia"]:
+            st.warning("Ya estoy guardando…")
+            st.stop()
+
+        # Anti doble envío (mismo formulario dentro de 60s)
+        submit_key = _make_submit_key()
+        now = time.time()
+        if (st.session_state["last_submit_key"] == submit_key) and (now - st.session_state["last_submit_ts"] < 60):
+            st.warning("Este MIA ya fue enviado recién. Evito duplicarlo.")
+            st.stop()
+
+        st.session_state["saving_mia"] = True
+
         if not nombre_instalacion or not creado_por:
+            st.session_state["saving_mia"] = False
             st.error("❌ Nombre de la instalación y Usuario son obligatorios.")
-        else:
-            try:
+            st.stop()
+
+        try:
+            with st.spinner("Guardando MIA..."):
                 mie_id, codigo = insertar_mie(
                     drm=drm,
                     pozo=nombre_instalacion,
@@ -633,22 +691,29 @@ if modo == "Nuevo MIA":
                     fecha_hora_aprobacion=fecha_hora_aprobacion,
                 )
 
-                st.success(f"✅ MIA guardado. CÓDIGO: {codigo}")
+            # marcar como enviado (para evitar reintentos inmediatos)
+            st.session_state["last_submit_key"] = submit_key
+            st.session_state["last_submit_ts"] = now
 
-                if fotos:
-                    for archivo in fotos:
-                        nombre_destino = (
-                            f"{codigo}/ANTES/"
-                            f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{archivo.name}"
-                        )
-                        blob_name = subir_foto_a_bucket(archivo, nombre_destino)
-                        insertar_foto(mie_id, "ANTES", blob_name)
+            st.success(f"✅ MIA guardado. CÓDIGO: {codigo}")
 
-                st.session_state["ultimo_mie_id"] = mie_id
-                st.session_state["ultimo_codigo_mie"] = codigo
+            if fotos:
+                for archivo in fotos:
+                    nombre_destino = (
+                        f"{codigo}/ANTES/"
+                        f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{archivo.name}"
+                    )
+                    blob_name = subir_foto_a_bucket(archivo, nombre_destino)
+                    insertar_foto(mie_id, "ANTES", blob_name)
 
-            except Exception as e:
-                st.error(f"⚠️ Error guardando MIA: {e}")
+            st.session_state["ultimo_mie_id"] = mie_id
+            st.session_state["ultimo_codigo_mie"] = codigo
+
+        except Exception as e:
+            st.error(f"⚠️ Error guardando MIA: {e}")
+
+        finally:
+            st.session_state["saving_mia"] = False
 
     # ==================================================
     #  PDF del último MIA
@@ -676,6 +741,7 @@ if modo == "Nuevo MIA":
                 file_name=file_name,
                 mime="application/pdf",
             )
+
 
 # =======================================================
 #  MODO 2 - HISTORIAL MIA (CON EDICIÓN SOLO DE CARGA + REEMPLAZO FOTOS ANTES)
