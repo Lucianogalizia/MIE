@@ -6,7 +6,7 @@ from datetime import datetime
 from io import BytesIO
 from google.cloud import bigquery, storage
 from config import PROJECT_ID, DATASET_ID, BUCKET_NAME
-
+from google.api_core.exceptions import NotFound
 # ---------------------------------------------------------
 # Clientes globales
 # ---------------------------------------------------------
@@ -92,8 +92,19 @@ def obtener_fotos_mie(mie_id: int):
     for r in rows:
         if not r.url_foto:
             continue
+
         blob = bucket.blob(r.url_foto)
-        data = blob.download_as_bytes()
+
+        try:
+            data = blob.download_as_bytes()
+        except NotFound:
+            # El archivo no existe en el bucket (pero sí quedó registrado en BigQuery)
+            # Lo ignoramos para no romper la pantalla
+            continue
+        except Exception:
+            # Cualquier otro error de descarga también se ignora
+            continue
+
         fotos.append({
             "tipo": r.tipo,
             "fecha_hora": r.fecha_hora,
